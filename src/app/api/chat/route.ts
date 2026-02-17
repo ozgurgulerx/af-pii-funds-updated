@@ -18,6 +18,38 @@ const PYTHON_API_URL = process.env.BACKEND_URL || process.env.PYTHON_API_URL || 
 // Streaming text encoder
 const encoder = new TextEncoder();
 
+// Retry helper for transient backend failures
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) return response;
+
+      // Don't retry on client errors (4xx)
+      if (response.status >= 400 && response.status < 500) {
+        return response;
+      }
+
+      // Retry on server errors (5xx)
+      if (attempt === maxRetries) return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt === maxRetries) throw lastError;
+
+      // Exponential backoff: 500ms, 1000ms, 1500ms
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+  }
+
+  throw lastError || new Error("Max retries exceeded");
+}
+
 function createSSEMessage(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
@@ -159,8 +191,8 @@ export async function POST(request: NextRequest) {
             )
           );
 
-          // Call the Python API
-          const response = await fetch(`${PYTHON_API_URL}/api/chat`, {
+          // Call the Python API with retry logic for transient failures
+          const response = await fetchWithRetry(`${PYTHON_API_URL}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

@@ -196,17 +196,223 @@ The system blocks these banking-relevant PII types:
 - ACR: `aistartuptr.azurecr.io`
 - Image: `fund-rag-backend:latest`
 
+### Building and Deploying Backend Image
+
+**CRITICAL: Always build for AMD64 platform (AKS runs on AMD64, not ARM64)**
+
+```bash
+# Build for AMD64 (required even when building on Mac ARM64/Apple Silicon)
+cd /Users/ozgurguler/Developer/Projects/af-pii-funds/fund-rag-poc
+docker build --platform linux/amd64 -f Dockerfile.backend -t aistartuptr.azurecr.io/fund-rag-backend:latest .
+
+# Push to ACR
+az acr login --name aistartuptr
+docker push aistartuptr.azurecr.io/fund-rag-backend:latest
+
+# Restart deployment to pull new image
+kubectl rollout restart deployment/fund-rag-backend -n fund-rag
+```
+
+**Common Error:** If you see `exec format error` in pod logs, you built for the wrong architecture. Rebuild with `--platform linux/amd64`.
+
 ### GitHub Actions Workflows
 - `deploy-backend.yaml` - Build and deploy backend to AKS
 - `deploy-frontend.yaml` - Build and deploy frontend to App Service
 - `migrate-database.yaml` - Run PostgreSQL migration (manual trigger)
 
+## Backend Infrastructure (Current State: 2026-02-03)
+
+### AKS Node Pools
+
+| Pool | VM Size | vCPU | RAM | Count | Purpose |
+|------|---------|------|-----|-------|---------|
+| `nodepool1` | Standard_D2ads_v6 | 2 | 8GB | 1 | System components |
+| `largepool` | Standard_D4ads_v6 | 4 | 16GB | 1 | Legacy (can be removed) |
+| `xlpool` | Standard_D8ads_v6 | 8 | 32GB | 1 | **Backend workloads** |
+
+### Backend Pod Resources
+
+```yaml
+resources:
+  requests:
+    memory: "4Gi"
+    cpu: "2"
+  limits:
+    memory: "12Gi"
+    cpu: "4"
+livenessProbe:
+  failureThreshold: 18   # Allows 270s of blocked health checks
+  periodSeconds: 15
+readinessProbe:
+  failureThreshold: 12
+```
+
+- **Replicas:** 1 pod on `xlpool` node
+- **Gunicorn Workers:** 1 (with `--max-requests 100` for memory recycling)
+- **Node Selector:** `workload: fund-rag` (targets xlpool)
+- **Image:** `aistartuptr.azurecr.io/fund-rag-backend:latest`
+
+### Why These Resources?
+
+The CHAIN query route (macro-driven fund selection) requires:
+- Multiple LLM calls (routing + criteria derivation + synthesis)
+- Parallel search operations (RAPTOR + SQL + Semantic)
+- All results held in memory during processing
+
+**Critical: Liveness Probe Configuration**
+
+With 1 sync gunicorn worker, long-running queries (HYBRID, CHAIN) block health check responses. The increased `failureThreshold: 18` with `periodSeconds: 15` allows queries to run for up to 270 seconds without the pod being killed.
+
+Previous settings (failureThreshold: 3, periodSeconds: 10) caused pods to be killed after ~30 seconds of query processing.
+
+### Verify Backend Health
+
+```bash
+# Check pods are running on largepool
+kubectl get pods -n fund-rag -o wide
+
+# Check resource limits
+kubectl describe deployment fund-rag-backend -n fund-rag | grep -A6 "Limits:"
+
+# Check node pools
+az aks nodepool list --resource-group rg-fund-rag --cluster-name aks-fund-rag -o table
+```
+
+---
+
+## Query Routing System
+
+### Overview
+
+The backend routes queries to different retrieval paths based on the query intent. Routing can use either LLM-based classification (more accurate) or keyword heuristics (faster).
+
+**File:** `src/query_router.py`
+
+### Available Routes
+
+| Route | Data Sources | Use Case | Example Query |
+|-------|--------------|----------|---------------|
+| **SQL** | PostgreSQL only | Precise data lookups, rankings, comparisons | "Top 5 largest bond funds by AUM" |
+| **SEMANTIC** | Azure AI Search (nport-funds-index) | Style matching, similarity search | "Funds similar to PIMCO Income Fund" |
+| **RAPTOR** | Azure AI Search (imf_raptor) | Economic outlook, IMF analysis | "What's IMF saying about inflation?" |
+| **SEMANTIC_RAPTOR** | SEMANTIC + RAPTOR (parallel) | Fund style + macro context (no SQL needed) | "Growth funds aligned with IMF outlook" |
+| **HYBRID** | SQL + SEMANTIC + RAPTOR (parallel) | When macro context is explicitly stated | "Best funds given 3% inflation" |
+| **CHAIN** | RAPTOR → SQL + SEMANTIC (sequential) | When macro context must be looked up first | "Best funds for current rate environment" |
+
+### Route Selection Logic
+
+```
+User Query
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Query Router                             │
+│  (LLM-based or heuristic keyword matching)                  │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ├── Contains "top", "largest", "which funds hold", "CUSIP" → SQL
+    ├── Contains "similar to", "conservative", "style" (no macro) → SEMANTIC
+    ├── Contains "IMF", "inflation outlook", "economic" (no funds) → RAPTOR
+    ├── Contains style + macro (no SQL needed) → SEMANTIC_RAPTOR
+    ├── Contains macro + funds + "current", "environment" → CHAIN
+    └── Contains macro + funds (context stated) → HYBRID
+```
+
+### CHAIN vs HYBRID - Key Distinction
+
+| Aspect | HYBRID | CHAIN |
+|--------|--------|-------|
+| Macro context | **Explicitly stated** in query | **Must be looked up** from RAPTOR |
+| Execution | Parallel (all sources at once) | Sequential (RAPTOR first, then funds) |
+| Example | "Best funds given 3% inflation" | "Best funds for current rate environment" |
+| LLM calls | 1 (synthesis only) | 3 (routing + criteria + synthesis) |
+| Latency | ~3-5 seconds | ~8-15 seconds |
+| Memory usage | Medium | **High** (requires 4Gi limit) |
+
+### SEMANTIC_RAPTOR Route (New)
+
+Use when queries combine fund **style/similarity** with **economic outlook** but don't need precise SQL data.
+
+| Aspect | SEMANTIC_RAPTOR |
+|--------|-----------------|
+| Data sources | SEMANTIC + RAPTOR (parallel) |
+| Use case | Fund style aligned with macro outlook |
+| Example | "Growth funds aligned with IMF positive outlook" |
+| LLM calls | 1 (synthesis only) |
+| Latency | ~4-6 seconds |
+| Memory usage | Low-Medium |
+
+**Best for:**
+- "Conservative funds suited for uncertain economic times"
+- "Income-focused funds that fit the inflation forecast"
+- "Growth-oriented funds aligned with positive outlook"
+
+**NOT for:**
+- Queries needing precise data (use HYBRID or CHAIN)
+- Rankings or comparisons (use SQL)
+
+### CHAIN Route Execution Flow
+
+```
+Step 1: RAPTOR Search
+        └── "What is the current rate environment?"
+        └── Returns: IMF economic outlook data
+                    │
+                    ▼
+Step 2: LLM Derives Investment Criteria
+        └── "Based on macro context, look for: short duration, floating rate, TIPS..."
+                    │
+                    ▼
+Step 3: SQL + Semantic Search (parallel)
+        └── Find funds matching derived criteria
+                    │
+                    ▼
+Step 4: LLM Synthesizes Final Answer
+        └── Combines macro context + fund recommendations
+```
+
+### Trigger Keywords for CHAIN
+
+From `query_router.py`:
+```python
+chain_triggers = ["if", "given", "based on", "considering", "current", "environment", "outlook"]
+raptor_keywords = ["imf", "inflation", "rate environment", "economic conditions", ...]
+fund_keywords = ["fund", "invest", "portfolio", "position", "best", "recommend"]
+
+# CHAIN = raptor_keywords + fund_keywords + chain_triggers
+```
+
+### LLM Routing vs Heuristic Routing
+
+| Aspect | LLM Routing | Heuristic Routing |
+|--------|-------------|-------------------|
+| Accuracy | High (understands nuance) | Medium (keyword matching) |
+| Latency | +1-2 seconds | Instant |
+| Cost | Uses LLM tokens | Free |
+| Config | `use_llm_routing=True` | `use_llm_routing=False` |
+
+**Current default:** LLM routing enabled for accurate path detection.
+
+### Routing Prompt (for LLM-based routing)
+
+The LLM receives detailed instructions about each route in `ROUTING_PROMPT`. Key guidance:
+
+- **SQL**: "Top N", rankings, CUSIP lookups, aggregations
+- **SEMANTIC**: "Similar to", investment style, descriptive queries
+- **SEMANTIC_RAPTOR**: Fund style + macro outlook (no SQL needed)
+- **RAPTOR**: IMF, inflation, economic outlook (no fund questions)
+- **HYBRID**: Macro context explicitly stated + fund questions
+- **CHAIN**: Macro context must be looked up ("current environment", "if X happens")
+
+---
+
 ## Performance Optimizations Applied
-- LLM routing disabled by default (uses fast heuristic routing)
+- LLM routing enabled for accurate query classification
 - Streaming delay reduced to 5ms
 - PII timeout reduced to 5s
 - PostgreSQL with proper indexes for fast queries
-- AKS autoscaling 1-2 nodes based on load
+- Backend pod on dedicated xlpool node (8 vCPU, 32GB RAM)
+- 8Gi memory limit prevents OOM crashes on CHAIN queries
 
 ## Environment Variables
 
@@ -753,3 +959,74 @@ This is why the health check workflow can monitor AKS but not PostgreSQL.
 | Azure Infrastructure | Use plan file or recreate from CLAUDE.md |
 
 These prompts can be used to set up similar projects with the same styling and infrastructure patterns.
+
+---
+
+## Database Protection (Read-Only Mode)
+
+**CRITICAL: The production database is protected from modifications.**
+
+### How It Works
+
+The application connects to PostgreSQL using a **read-only user** (`fundrag_readonly`) that can only execute SELECT queries. Any attempt to INSERT, UPDATE, DELETE, DROP, or TRUNCATE will fail with "permission denied".
+
+### Credentials
+
+| Setting | Value |
+|---------|-------|
+| User | `fundrag_readonly` |
+| Password | `FundRagReadOnly2026` |
+| Permissions | SELECT only on `nport_funds` schema |
+
+### Protection Verified
+
+The read-only user is blocked from:
+- ❌ INSERT - Cannot add new rows
+- ❌ UPDATE - Cannot modify existing data
+- ❌ DELETE - Cannot remove rows
+- ❌ DROP - Cannot delete tables
+- ❌ TRUNCATE - Cannot clear tables
+
+Only SELECT queries work:
+- ✅ SELECT - Can read all data
+
+### Kubernetes Configuration
+
+The backend uses these settings (in `k8s/backend-configmap.yaml`):
+```yaml
+PGUSER: "fundrag_readonly"  # Read-only user
+```
+
+The password is stored in `backend-secrets` (not in git).
+
+### Admin Access (For Data Management Only)
+
+If you need to modify data (migrations, syncs), use the admin user:
+```
+User: ozgurguler
+Password: (in .env as PGPASSWORD)
+```
+
+**NEVER deploy the admin credentials to the application.**
+
+### Restoring Protection (If Compromised)
+
+If the read-only user needs to be recreated:
+
+```sql
+-- Connect as admin (ozgurguler)
+CREATE USER fundrag_readonly WITH PASSWORD 'FundRagReadOnly2026';
+GRANT CONNECT ON DATABASE fundrag TO fundrag_readonly;
+GRANT USAGE ON SCHEMA nport_funds TO fundrag_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA nport_funds TO fundrag_readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA nport_funds GRANT SELECT ON TABLES TO fundrag_readonly;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA nport_funds FROM fundrag_readonly;
+```
+
+Then update Kubernetes:
+```bash
+kubectl create secret generic backend-secrets -n fund-rag \
+  --from-literal=PGPASSWORD="FundRagReadOnly2026" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/fund-rag-backend -n fund-rag
+```

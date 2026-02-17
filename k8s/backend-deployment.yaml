@@ -15,6 +15,17 @@ spec:
       labels:
         app: fund-rag-backend
     spec:
+      nodeSelector:
+        workload: fund-rag
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: fund-rag-backend
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: backend
         image: aistartuptr.azurecr.io/fund-rag-backend:latest
@@ -28,19 +39,19 @@ spec:
             name: backend-secrets
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "250m"
+            memory: "4Gi"
+            cpu: "2"
           limits:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "12Gi"
+            cpu: "4"
         livenessProbe:
           httpGet:
             path: /health
             port: 5001
           initialDelaySeconds: 30
-          periodSeconds: 10
+          periodSeconds: 15
           timeoutSeconds: 5
-          failureThreshold: 3
+          failureThreshold: 18
         readinessProbe:
           httpGet:
             path: /health
@@ -48,7 +59,7 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
-          failureThreshold: 3
+          failureThreshold: 12
       imagePullSecrets:
       - name: acr-secret
 ---

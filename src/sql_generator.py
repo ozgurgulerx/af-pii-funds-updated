@@ -8,6 +8,7 @@ import os
 import re
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
 
@@ -225,9 +226,11 @@ class SQLGenerator:
     """Generate SQL queries from natural language using LLM."""
 
     def __init__(self):
+        credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
         self.client = AzureOpenAI(
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            azure_ad_token_provider=token_provider,
             api_version="2024-06-01"
         )
         self.model = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-nano")

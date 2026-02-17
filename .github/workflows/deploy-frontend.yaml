@@ -114,6 +114,15 @@ jobs:
           echo "Waiting for app to start..."
           sleep 30
 
+          # Test health endpoint
+          HEALTH=$(curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/health" -m 15)
+          if echo "$HEALTH" | grep -q '"status":"ok"'; then
+            echo "✅ Health check passed"
+          else
+            echo "❌ Health check failed: $HEALTH"
+            exit 1
+          fi
+
           # Test PII endpoint
           RESPONSE=$(curl -s -X POST "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/pii" \
             -H "Content-Type: application/json" \
@@ -121,7 +130,28 @@ jobs:
             -m 30)
 
           if echo "$RESPONSE" | grep -q "blocked"; then
-            echo "✅ Deployment verified - PII API responding"
+            echo "✅ PII API responding"
           else
-            echo "⚠️ Warning: Unexpected response: $RESPONSE"
+            echo "❌ PII API failed: $RESPONSE"
+            exit 1
           fi
+
+          # Verify JS chunks are accessible (prevent 404 errors)
+          echo "Checking JS chunk accessibility..."
+          HTML=$(curl -sL "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/chat")
+          CHUNK=$(echo "$HTML" | grep -o 'app/chat/page-[a-f0-9]*\.js' | head -1)
+
+          if [ -n "$CHUNK" ]; then
+            STATUS=$(curl -sI "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/_next/static/chunks/$CHUNK" | grep "HTTP" | head -1)
+            if echo "$STATUS" | grep -q "200"; then
+              echo "✅ JS chunks accessible: $CHUNK"
+            else
+              echo "❌ JS chunk 404: $CHUNK - $STATUS"
+              exit 1
+            fi
+          else
+            echo "⚠️ Could not extract chunk name from HTML"
+          fi
+
+          echo ""
+          echo "🎉 Deployment verified successfully!"

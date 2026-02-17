@@ -102,7 +102,15 @@ export function Message({
           </div>
         )}
 
-        {!isUser && (!message.citations || message.citations.length === 0) && (
+        {/* Show Verified badge for Foundry IQ (inline citations) when isVerified is true */}
+        {!isUser && message.isVerified && (!message.citations || message.citations.length === 0) && (
+          <Badge variant="success" className="text-xs gap-1">
+            <CheckCircle2 className="h-3 w-3" />
+            Verified
+          </Badge>
+        )}
+
+        {!isUser && !message.isVerified && (!message.citations || message.citations.length === 0) && (
           <Badge variant="warning" className="text-xs gap-1">
             <AlertCircle className="h-3 w-3" />
             Unverified

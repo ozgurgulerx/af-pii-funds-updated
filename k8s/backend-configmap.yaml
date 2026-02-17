@@ -17,12 +17,19 @@ data:
   PII_CONTAINER_ENDPOINT: "http://pii-ozguler.eastus.azurecontainer.io:5000"
 
   # PostgreSQL Configuration (using private endpoint)
+  # IMPORTANT: Using read-only user to prevent any data modifications
   PGHOST: "aistartupstr.postgres.database.azure.com"
   PGPORT: "5432"
   PGDATABASE: "fundrag"
-  PGUSER: "ozgurguler"
+  PGUSER: "fundrag_readonly"
 
   # Application Configuration
   FLASK_ENV: "production"
   LOG_LEVEL: "INFO"
   USE_POSTGRES: "true"
+
+  # Azure AI Foundry Configuration (for Foundry IQ mode)
+  AZURE_AI_PROJECT_ENDPOINT: "https://ozgurguler-7212-resource.services.ai.azure.com/api/projects/ozgurguler-7212"
+  AZURE_OPENAI_ENDPOINT_FOUNDRY: "https://ozgurguler-7212-resource.openai.azure.com"
+  FOUNDRY_AGENT_NAME: "funds-foundry-IQ-agent"
+  FOUNDRY_MODEL_DEPLOYMENT: "gpt-5-nano"

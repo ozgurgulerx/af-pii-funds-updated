@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
@@ -36,10 +37,12 @@ RAPTOR_INDEX = os.getenv("RAPTOR_INDEX_NAME", "imf-weo-raptor-index")  # Your RA
 
 class FundRAGAgent:
     def __init__(self):
-        # Initialize OpenAI client
+        # Initialize OpenAI client - use Azure AD auth (API key auth disabled on resource)
+        credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
         self.llm = AzureOpenAI(
             azure_endpoint=OPENAI_ENDPOINT,
-            api_key=OPENAI_KEY,
+            azure_ad_token_provider=token_provider,
             api_version="2024-06-01"
         )
 

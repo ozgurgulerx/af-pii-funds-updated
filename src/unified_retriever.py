@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
@@ -108,10 +109,12 @@ class UnifiedRetriever:
     """
 
     def __init__(self, enable_pii_filter: bool = True):
-        # LLM client
+        # LLM client - use Azure AD auth (API key auth disabled on resource)
+        credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
         self.llm = AzureOpenAI(
             azure_endpoint=OPENAI_ENDPOINT,
-            api_key=OPENAI_KEY,
+            azure_ad_token_provider=token_provider,
             api_version="2024-06-01"
         )
 
@@ -475,8 +478,8 @@ class UnifiedRetriever:
             route="SEMANTIC_RAPTOR",
             reasoning="Query combines fund style matching with macro economic context",
             citations=all_citations,
-            semantic_results=semantic_results,
-            raptor_results=raptor_results
+            semantic_results=semantic_results[:5] if semantic_results else [],
+            raptor_results=raptor_results[:3] if raptor_results else []
         )
 
     def execute_hybrid_route(self, query: str, sql_hint: str = None,
@@ -532,14 +535,13 @@ class UnifiedRetriever:
             route="HYBRID",
             reasoning="Query requires both fund data and macro context",
             citations=all_citations,
-            sql_results=sql_results,
-            semantic_results=semantic_results,
-            raptor_results=raptor_results,
+            sql_results=sql_results[:10] if sql_results else [],
+            semantic_results=semantic_results[:5] if semantic_results else [],
+            raptor_results=raptor_results[:3] if raptor_results else [],
             sql_query=sql_query
         )
 
-    def execute_chain_route(self, query: str, raptor_topics: List[str] = None,
-                            progress_callback: callable = None) -> RetrievalResult:
+    def execute_chain_route(self, query: str, raptor_topics: List[str] = None) -> RetrievalResult:
         """
         Execute chain retrieval: RAPTOR -> derive criteria -> SQL/Semantic.
         Macro context drives fund selection.
@@ -547,14 +549,8 @@ class UnifiedRetriever:
         Args:
             query: User's question
             raptor_topics: Optional topics for RAPTOR search
-            progress_callback: Optional callback for progress updates
         """
-        def emit_progress(stage: str, message: str):
-            if progress_callback:
-                progress_callback({"stage": stage, "message": message})
-
         # Step 1: Get RAPTOR context first
-        emit_progress("raptor", "Analyzing economic outlook...")
         raptor_results, raptor_citations = self.query_raptor(query, raptor_topics, top=3)
 
         if not raptor_results:
@@ -562,7 +558,6 @@ class UnifiedRetriever:
             return self.execute_hybrid_route(query)
 
         # Step 2: Use LLM to derive fund selection criteria from macro context
-        emit_progress("criteria", "Deriving fund selection criteria...")
         macro_context = "\n".join([
             r.get("raw", r.get("content", ""))[:500]
             for r in raptor_results
@@ -589,13 +584,11 @@ Return specific fund selection criteria in 2-3 sentences."""
         criteria = criteria_response.choices[0].message.content
 
         # Step 3: Use criteria to query funds
-        emit_progress("search", "Searching matching funds...")
         fund_query = f"{query}\n\nBased on analysis: {criteria}"
         sql_results, sql_query, sql_citations = self.query_sql(fund_query)
         semantic_results, semantic_citations = self.query_semantic(fund_query, top=3)
 
         # Step 4: Synthesize final answer
-        emit_progress("synthesize", "Generating recommendations...")
         context = {
             "macro_context": macro_context[:1000],
             "derived_criteria": criteria,
@@ -613,9 +606,9 @@ Return specific fund selection criteria in 2-3 sentences."""
             route="CHAIN",
             reasoning="Macro context drives fund selection",
             citations=all_citations,
-            sql_results=sql_results,
-            semantic_results=semantic_results,
-            raptor_results=raptor_results,
+            sql_results=sql_results[:10] if sql_results else [],
+            semantic_results=semantic_results[:5] if semantic_results else [],
+            raptor_results=raptor_results[:3] if raptor_results else [],
             sql_query=sql_query
         )
 
@@ -637,8 +630,7 @@ Return specific fund selection criteria in 2-3 sentences."""
             return PiiCheckResult(has_pii=False, entities=[])
         return self.pii_filter.check(text)
 
-    def answer(self, query: str, use_llm_routing: bool = True,
-               progress_callback: callable = None) -> RetrievalResult:
+    def answer(self, query: str, use_llm_routing: bool = True) -> RetrievalResult:
         """
         Main entry point - route query and return answer with citations.
         All queries are checked for PII before processing.
@@ -646,7 +638,6 @@ Return specific fund selection criteria in 2-3 sentences."""
         Args:
             query: User's natural language question
             use_llm_routing: Whether to use LLM (True) or heuristics (False) for routing
-            progress_callback: Optional callback for progress updates (used by CHAIN route)
 
         Returns:
             RetrievalResult with answer, citations, and metadata
@@ -696,7 +687,7 @@ Return specific fund selection criteria in 2-3 sentences."""
         elif route == "SEMANTIC_RAPTOR":
             result = self.execute_semantic_raptor_route(query, raptor_topics)
         elif route == "CHAIN":
-            result = self.execute_chain_route(query, raptor_topics, progress_callback)
+            result = self.execute_chain_route(query, raptor_topics)
         else:  # HYBRID
             result = self.execute_hybrid_route(query, sql_hint, raptor_topics)
 

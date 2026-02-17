@@ -212,10 +212,10 @@ export const SAMPLE_WATCHLIST: WatchlistItem[] = [
 
 // Legacy follow-up suggestions (string array for backwards compatibility)
 export const FOLLOW_UP_SUGGESTIONS = [
-  "Best bond funds given current rate environment?",
-  "Which funds have highest NVIDIA exposure?",
-  "Compare duration risk across top bond funds",
-  "What does IMF say about emerging markets?",
+  "Which funds are riding the AI wave?",
+  "Best funds if the dollar weakens?",
+  "Top bond funds for today's rate environment",
+  "What's the IMF outlook on global growth?",
 ];
 
 // Query type definitions for the UI
@@ -228,13 +228,51 @@ export interface FollowUpSuggestion {
 }
 
 export const ENHANCED_FOLLOW_UP_SUGGESTIONS: FollowUpSuggestion[] = [
-  { text: "Best bond funds given current rate environment?", type: "hybrid" },
-  { text: "Which funds have highest NVIDIA exposure?", type: "sql" },
-  { text: "Compare duration risk across top bond funds", type: "sql" },
-  { text: "What does IMF say about emerging markets?", type: "raptor" },
-  { text: "Conservative funds similar to Vanguard Total Bond", type: "semantic" },
-  { text: "How should I position for Fed rate cuts?", type: "chain" },
+  { text: "Which funds have the biggest NVIDIA positions?", type: "sql" },
+  { text: "Best funds for current rate environment?", type: "chain" },
+  { text: "What's IMF saying about US growth in 2025?", type: "raptor" },
+  { text: "Funds with an aggressive AI/tech focus", type: "semantic" },
+  { text: "Where to invest if inflation stays high?", type: "chain" },
+  { text: "Compare duration risk: Vanguard vs PIMCO", type: "sql" },
 ];
+
+// Demo queries for live presentations - designed to be impressive and topical
+export const DEMO_QUERIES = {
+  // Code-based RAG queries (work with SQL/SEMANTIC/RAPTOR/CHAIN routes)
+  codeRag: [
+    // SQL - Fast, precise, impressive data lookups
+    { query: "Which funds have the largest NVIDIA holdings?", route: "SQL", description: "Shows AI investment exposure" },
+    { query: "Top 5 bond funds by total assets under management", route: "SQL", description: "Quick ranking query" },
+    { query: "Funds with duration risk (DV01) over $10 million", route: "SQL", description: "Risk metric lookup" },
+
+    // SEMANTIC - Style and similarity matching
+    { query: "Conservative income funds for retirees", route: "SEMANTIC", description: "Style-based search" },
+    { query: "Aggressive growth funds betting on tech", route: "SEMANTIC", description: "Investment style matching" },
+
+    // RAPTOR - Economic outlook
+    { query: "What's the IMF forecast for global inflation?", route: "RAPTOR", description: "Macro economic context" },
+    { query: "IMF view on emerging market growth", route: "RAPTOR", description: "Regional economic outlook" },
+
+    // SEMANTIC_RAPTOR - Fund style + macro context (faster than CHAIN, no SQL)
+    { query: "Growth funds aligned with IMF's positive outlook", route: "SEMANTIC_RAPTOR", description: "Style + macro (parallel)" },
+    { query: "Conservative funds suited for uncertain economic times", route: "SEMANTIC_RAPTOR", description: "Defense style + macro" },
+    { query: "Income-focused funds that fit the inflation forecast", route: "SEMANTIC_RAPTOR", description: "Income style + inflation" },
+
+    // CHAIN - The impressive macro-driven queries (takes longer but shows intelligence)
+    { query: "Best bond funds for current rate environment?", route: "CHAIN", description: "Looks up rates, then recommends funds" },
+    { query: "Where should I invest if inflation rises to 5%?", route: "CHAIN", description: "Hypothetical scenario analysis" },
+    { query: "How to position my portfolio given IMF's outlook?", route: "CHAIN", description: "Full macro-driven recommendation" },
+  ],
+
+  // Foundry IQ queries (uses Azure AI Agent with grounded knowledge)
+  foundryIq: [
+    { query: "What are the largest bond ETFs?", description: "General fund knowledge" },
+    { query: "Explain duration risk in bond funds", description: "Educational/conceptual" },
+    { query: "How do interest rates affect bond prices?", description: "Market mechanics" },
+    { query: "Best practices for fixed income allocation", description: "Investment guidance" },
+    { query: "Compare active vs passive bond fund strategies", description: "Strategy comparison" },
+  ],
+};
 
 export interface QueryCategory {
   id: QueryType;
@@ -248,54 +286,41 @@ export interface QueryCategory {
 export const QUERY_CATEGORIES: QueryCategory[] = [
   {
     id: "sql",
-    title: "SQL Queries",
-    description: "Precise data lookups from SEC N-PORT filings",
+    title: "Data Lookups",
+    description: "Precise queries from SEC N-PORT filings (490K holdings)",
     icon: "Database",
     color: "blue",
     examples: [
-      "Top 10 funds by total net assets",
-      "Which funds hold NVIDIA stock?",
-      "Show me funds with DV01 exposure > $5M",
-      "List all funds from Vanguard with AUM over $50B",
+      "Which funds hold the most NVIDIA stock?",
+      "Top 10 largest bond funds by AUM",
+      "Funds with DV01 exposure over $5 million",
+      "Compare Apple holdings: Vanguard vs Fidelity",
     ],
   },
   {
     id: "semantic",
-    title: "Semantic Queries",
+    title: "Style Matching",
     description: "Find funds by investment style and similarity",
     icon: "Compass",
     color: "purple",
     examples: [
-      "Conservative income-focused funds",
-      "Funds similar to PIMCO Income Fund",
-      "Growth-oriented equity funds",
-      "Low-risk bond funds for retirement",
-    ],
-  },
-  {
-    id: "hybrid",
-    title: "Hybrid Queries",
-    description: "Combine fund data with macro economic context",
-    icon: "Layers",
-    color: "emerald",
-    examples: [
-      "Best bond funds given current rate environment",
-      "Top funds considering inflation outlook",
-      "High-yield funds positioned for soft landing",
-      "Duration-sensitive funds for rate cut scenario",
+      "Conservative income funds for retirement",
+      "Aggressive growth funds focused on AI/tech",
+      "Funds similar to PIMCO Total Return",
+      "Low-volatility bond funds for capital preservation",
     ],
   },
   {
     id: "chain",
-    title: "Chain Queries",
-    description: "Macro-driven multi-step fund selection",
+    title: "Macro-Driven",
+    description: "Economic context drives fund recommendations",
     icon: "GitBranch",
     color: "amber",
     examples: [
-      "How should I position my portfolio for IMF's growth forecast?",
-      "Best funds if inflation rises above 3%",
-      "Which funds benefit from emerging market recovery?",
-      "Portfolio strategy based on Fed rate path",
+      "Best bond funds for current rate environment",
+      "Where to invest if inflation rises to 5%?",
+      "Portfolio positioning for IMF's growth forecast",
+      "Which funds benefit if dollar weakens?",
     ],
   },
   {
@@ -305,10 +330,10 @@ export const QUERY_CATEGORIES: QueryCategory[] = [
     icon: "Globe",
     color: "rose",
     examples: [
-      "What's the IMF's inflation outlook for 2025?",
-      "Summarize IMF views on US growth",
-      "What does IMF say about emerging markets?",
-      "Global recession risk according to IMF",
+      "What's the IMF saying about inflation in 2025?",
+      "IMF's view on US economic growth",
+      "Global recession risk according to the IMF",
+      "What does IMF predict for emerging markets?",
     ],
   },
 ];

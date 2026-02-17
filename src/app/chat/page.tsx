@@ -115,43 +115,73 @@ export default function ChatPage() {
       let fullContent = "";
       let newCitations: Citation[] = [];
       let isVerified = false;
+      let buffer = ""; // Buffer for incomplete SSE lines across chunks
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        // Append new chunk to buffer
+        buffer += decoder.decode(value, { stream: true });
 
+        // Split by double newline (SSE message delimiter) to get complete messages
+        const messages = buffer.split("\n\n");
+
+        // Keep the last part in buffer (may be incomplete)
+        buffer = messages.pop() || "";
+
+        for (const message of messages) {
+          const lines = message.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                switch (data.type) {
+                  case "progress":
+                    // Add progress update for CHAIN queries
+                    setQueryProgress((prev) => [...prev, { stage: data.stage, message: data.message }]);
+                    break;
+                  case "text":
+                    fullContent += data.content;
+                    setStreamingContent(fullContent);
+                    break;
+                  case "citations":
+                    newCitations = data.citations;
+                    break;
+                  case "done":
+                    isVerified = data.isVerified;
+                    break;
+                  case "error":
+                    throw new Error(data.message);
+                }
+              } catch (e) {
+                // Re-throw if it's an intentional error (not a JSON parse error)
+                if (e instanceof Error && !e.message.includes("JSON")) {
+                  throw e;
+                }
+                console.warn("SSE parse warning:", line);
+              }
+            }
+          }
+        }
+      }
+
+      // Process any remaining buffered content after stream ends
+      if (buffer.trim()) {
+        const lines = buffer.split("\n");
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-
-              switch (data.type) {
-                case "progress":
-                  // Add progress update for CHAIN queries
-                  setQueryProgress((prev) => [...prev, { stage: data.stage, message: data.message }]);
-                  break;
-                case "text":
-                  fullContent += data.content;
-                  setStreamingContent(fullContent);
-                  break;
-                case "citations":
-                  newCitations = data.citations;
-                  break;
-                case "done":
-                  isVerified = data.isVerified;
-                  break;
-                case "error":
-                  throw new Error(data.message);
+              if (data.type === "done") {
+                isVerified = data.isVerified;
+              } else if (data.type === "citations") {
+                newCitations = data.citations;
               }
             } catch (e) {
-              // Re-throw if it's an intentional error (not a JSON parse error)
-              if (e instanceof Error && !e.message.includes("JSON")) {
-                throw e;
-              }
-              // Ignore JSON parse errors for incomplete chunks
+              // Final buffer parse failed - log for debugging
+              console.warn("Final SSE buffer parse failed:", line, e);
             }
           }
         }
