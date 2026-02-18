@@ -1,90 +1,73 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
-import { Building2, Moon, Sun, LogOut } from "lucide-react";
+import { Plane, RefreshCw, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider,
-} from "@/components/ui/tooltip";
-import { DATA_PROVIDERS } from "@/data/seed";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import type { Flight } from "@/types";
 
-export function Header() {
-  const { theme, setTheme } = useTheme();
-  // Prevent hydration mismatch by only showing dynamic content after mount
-  const [mounted, setMounted] = useState(false);
-  const [timestamp, setTimestamp] = useState<string | null>(null);
+interface HeaderProps {
+  selectedFlight: Flight | null;
+  auditMode: boolean;
+  onToggleAudit: (checked: boolean) => void;
+  onRefreshData: () => void;
+  onExportPdf: () => void;
+}
 
-  useEffect(() => {
-    setMounted(true);
-    setTimestamp(new Date().toISOString().split("T")[0] + " 08:00 UTC");
-  }, []);
+function formatZulu(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}Z`;
+}
 
+export function Header({ selectedFlight, auditMode, onToggleAudit, onRefreshData, onExportPdf }: HeaderProps) {
   return (
-    <header className="h-12 border-b border-border bg-surface-1 flex items-center justify-between px-4">
-      {/* Left: Logo & Branding */}
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold/20 to-gold/5 border border-gold/20 flex items-center justify-center">
-          <Building2 className="w-4 h-4 text-gold" />
-        </div>
-        <span className="font-semibold text-sm">Fund Intelligence</span>
-      </div>
-
-      {/* Center: Data Provenance Strip */}
-      <div className="hidden md:flex items-center gap-4 text-xs text-muted-foreground">
-        <span>
-          Data as-of{" "}
-          <span className="text-foreground font-medium">
-            {timestamp ?? "Loading..."}
-          </span>
-        </span>
-        <span className="w-px h-3 bg-border" />
-        <span>Internal Use Only</span>
-        <span className="w-px h-3 bg-border" />
-        <span>
-          Sources:{" "}
-          {DATA_PROVIDERS.map((p) => p.name).join(", ")}
-        </span>
-      </div>
-
-      {/* Right: Theme Toggle & User */}
+    <header className="h-14 border-b bg-card flex items-center px-4 gap-4 shrink-0">
+      {/* Left: Logo */}
       <div className="flex items-center gap-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                aria-label="Toggle theme"
-              >
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{mounted ? (theme === "dark" ? "Ivory Ledger" : "Obsidian Ledger") : "Toggle theme"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+          <Plane className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="font-semibold text-primary text-lg hidden sm:inline">Briefing Copilot</span>
+      </div>
 
-        <div className="w-px h-5 bg-border mx-1" />
+      {/* Center: Flight Context Bar */}
+      {selectedFlight && (
+        <>
+          <Separator orientation="vertical" className="h-6" />
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="font-mono font-bold text-sm">{selectedFlight.flightNumber}</span>
+            <span className="text-sm text-muted-foreground">
+              {selectedFlight.departure.icao}
+              <span className="mx-1">&rarr;</span>
+              {selectedFlight.arrival.icao}
+            </span>
+            <span className="text-xs text-muted-foreground hidden md:inline">
+              STD {formatZulu(selectedFlight.std)}
+              {selectedFlight.std !== selectedFlight.etd && (
+                <span className="text-amber-600 ml-1">ETD {formatZulu(selectedFlight.etd)}</span>
+              )}
+            </span>
+            <Badge variant="outline" className="text-[10px] h-5 hidden lg:inline-flex">
+              {selectedFlight.aircraftType}
+            </Badge>
+          </div>
+        </>
+      )}
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Sign out">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Sign out</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+      {/* Right: Actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        <Button variant="ghost" size="icon-sm" onClick={onRefreshData} title="Refresh data">
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={onExportPdf} title="Export PDF">
+          <FileDown className="h-4 w-4" />
+        </Button>
+        <Separator orientation="vertical" className="h-6" />
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          Audit
+          <Switch checked={auditMode} onCheckedChange={onToggleAudit} />
+        </label>
       </div>
     </header>
   );
