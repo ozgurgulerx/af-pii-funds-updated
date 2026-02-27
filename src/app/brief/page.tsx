@@ -57,8 +57,9 @@ type Action =
   | { type: "SET_STREAMING_META"; meta: { intent?: string; policyName?: string } }
   | { type: "ADD_PROGRESS_STEP"; step: ToolTraceStep }
   | { type: "UPDATE_PROGRESS_STEP"; step: ToolTraceStep }
-  | { type: "COMPLETE_RESPONSE"; message: CopilotMessage }
+  | { type: "COMPLETE_RESPONSE"; message: CopilotMessage; toolTrace: ToolTraceStep[] }
   | { type: "RESET_STREAMING" }
+  | { type: "SET_TOOL_TRACE"; toolTrace: ToolTraceStep[] }
   | { type: "SET_ACTIVE_CITATION"; id: number | null }
   | { type: "SET_CITATIONS"; citations: Citation[] }
   | { type: "SET_METADATA"; sourcesUsed: string[]; artifacts: Artifact[] }
@@ -135,6 +136,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         messages: [...state.messages, action.message],
+        toolTrace: action.toolTrace,
         isLoading: false,
         streamingContent: "",
         streamingMeta: null,
@@ -142,6 +144,8 @@ function reducer(state: State, action: Action): State {
       };
     case "RESET_STREAMING":
       return { ...state, streamingContent: "", streamingMeta: null, progressSteps: [] };
+    case "SET_TOOL_TRACE":
+      return { ...state, toolTrace: action.toolTrace };
     case "SET_ACTIVE_CITATION":
       return { ...state, activeCitationId: action.id };
     case "SET_CITATIONS":
@@ -198,6 +202,7 @@ export default function BriefPage() {
       dispatch({ type: "ADD_USER_MESSAGE", message: userMsg });
       dispatch({ type: "SET_LOADING", loading: true });
       dispatch({ type: "RESET_STREAMING" });
+      dispatch({ type: "SET_TOOL_TRACE", toolTrace: [] });
 
       let fullText = "";
       let intent: string | undefined;
@@ -292,7 +297,7 @@ export default function BriefPage() {
         followUps: receivedFollowUps,
       };
 
-      dispatch({ type: "COMPLETE_RESPONSE", message: assistantMsg });
+      dispatch({ type: "COMPLETE_RESPONSE", message: assistantMsg, toolTrace: receivedToolTrace });
       dispatch({ type: "SET_FOLLOW_UPS", followUps: receivedFollowUps });
 
       // Update tool trace in right rail
@@ -421,7 +426,7 @@ export default function BriefPage() {
           isCollapsed={state.rightRailCollapsed}
           onToggle={() => dispatch({ type: "TOGGLE_RIGHT_RAIL" })}
           citations={state.citations}
-          toolTrace={state.toolTrace.length > 0 ? state.toolTrace : state.progressSteps}
+          toolTrace={state.isLoading ? state.progressSteps : state.toolTrace}
           sourcesUsed={state.sourcesUsed}
           artifacts={state.artifacts}
           activeCitationId={state.activeCitationId}

@@ -60,10 +60,8 @@ export function CopilotChatTab({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      const viewport = scrollRef.current.querySelector("[data-radix-scroll-area-viewport]");
-      if (viewport) viewport.scrollTop = viewport.scrollHeight;
-    }
+    const viewport = scrollRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, streamingContent, progressSteps]);
 
   return (

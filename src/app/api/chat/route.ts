@@ -4,12 +4,15 @@ import { runMockAgent } from "@/lib/mock-agent";
 import { getFlightById } from "@/data/flights";
 import { createSSEMessage } from "@/lib/chat";
 
+const MAX_MESSAGES = 50;
+const MAX_MESSAGE_LENGTH = 2000;
+
 const RequestSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(["user", "assistant"]),
-    content: z.string(),
-  })),
-  flightId: z.string().optional(),
+    content: z.string().max(MAX_MESSAGE_LENGTH),
+  })).min(1).max(MAX_MESSAGES),
+  flightId: z.string().max(32).optional(),
 });
 
 const encoder = new TextEncoder();

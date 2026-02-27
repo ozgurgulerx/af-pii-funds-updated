@@ -1,5 +1,6 @@
 "use client";
 
+import { Children } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -51,14 +52,16 @@ export function CopilotMessageComponent({ message, activeCitationId, onCitationC
             remarkPlugins={[remarkGfm]}
             components={{
               p: ({ children, ...props }) => {
-                if (typeof children === "string") {
-                  const parts = children.split(/(\[\d+\])/g);
+                const textNodes = Children.toArray(children);
+                if (textNodes.every((node) => typeof node === "string")) {
+                  const text = textNodes.join("");
+                  const parts = text.split(/(\[\d+\])/g);
                   return (
                     <p {...props}>
                       {parts.map((part, i) => {
                         const match = part.match(/^\[(\d+)\]$/);
                         if (match) {
-                          const id = parseInt(match[1]);
+                          const id = Number.parseInt(match[1], 10);
                           return (
                             <span
                               key={i}
