@@ -26,11 +26,11 @@ export function CitationCard({ citation, isActive, onClick }: CitationCardProps)
   return (
     <button
       onClick={onClick}
-      className={cn(
-        "w-full text-left p-3 rounded-lg border transition-colors",
+        className={cn(
+        "w-full text-left p-3 rounded-lg border transition-all",
         isActive
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/30"
+          ? "border-primary bg-primary/10 shadow-subtle"
+          : "border-border/80 bg-card/70 hover:border-primary/35 hover:bg-primary/5"
       )}
     >
       <div className="flex items-start gap-2">

@@ -10,7 +10,6 @@ interface ToolTraceItemProps {
 export function ToolTraceItem({ step, showTokens }: ToolTraceItemProps) {
   return (
     <div className="flex items-start gap-3 relative">
-      {/* Status icon */}
       <div className="shrink-0 mt-0.5">
         {step.status === "completed" ? (
           <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -21,8 +20,7 @@ export function ToolTraceItem({ step, showTokens }: ToolTraceItemProps) {
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 rounded-md border border-border/70 bg-card/70 p-2.5">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-medium">{step.toolName}</span>
           <span className={cn(

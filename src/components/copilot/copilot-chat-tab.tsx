@@ -70,12 +70,16 @@ export function CopilotChatTab({
     <ScrollArea className="h-full" ref={scrollRef}>
       <div className="p-4 space-y-4">
         {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-40 gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center h-48 gap-4 rounded-xl border border-border/70 bg-card/70 shadow-subtle">
+            <div className="h-11 w-11 rounded-xl bg-primary/15 flex items-center justify-center">
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
-            <p className="text-sm text-muted-foreground">
-              Ask the Copilot a question or use a Quick Action.
+            <div className="text-center">
+              <p className="text-sm text-foreground font-medium">Fund Copilot is ready</p>
+              <p className="text-xs text-muted-foreground mt-1">Ask for allocation, risk posture, or performance context.</p>
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+              Institutional Workflow
             </p>
           </div>
         )}
@@ -97,7 +101,7 @@ export function CopilotChatTab({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="bg-card border rounded-xl px-4 py-3 space-y-1.5 shadow-subtle"
+              className="bg-card/80 border border-border/80 rounded-xl px-4 py-3 space-y-1.5 shadow-subtle"
             >
               {progressSteps.map((step, i) => (
                 <motion.div
@@ -139,7 +143,7 @@ export function CopilotChatTab({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card border rounded-xl px-4 py-3 shadow-subtle inline-block"
+            className="bg-card/80 border border-border/80 rounded-xl px-4 py-3 shadow-subtle inline-block"
           >
             <div className="thinking-dots flex items-center gap-0.5">
               <span />
@@ -155,7 +159,7 @@ export function CopilotChatTab({
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-card border rounded-xl px-4 py-3 shadow-subtle streaming-shimmer"
+            className="bg-card/80 border border-border/80 rounded-xl px-4 py-3 shadow-subtle streaming-shimmer"
           >
             {streamingMeta?.intent && (
               <motion.div

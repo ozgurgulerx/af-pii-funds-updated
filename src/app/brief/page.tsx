@@ -347,13 +347,11 @@ export default function BriefPage() {
           dispatch({ type: "SET_BRIEF_PACK", briefPack: bp || null });
         }}
         onExportPdf={() => {
-          // Placeholder for PDF export
-          alert("PDF export would be triggered here.");
+          alert("Export module integration pending.");
         }}
       />
 
-      <main className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left Rail */}
+      <main className="flex-1 min-h-0 flex overflow-hidden panel-grid">
         <LeftRail
           isCollapsed={state.leftRailCollapsed}
           onToggle={handleToggleLeftRail}
@@ -365,17 +363,16 @@ export default function BriefPage() {
           onMacroClick={handleMacroClick}
         />
 
-        {/* Center: Brief Pack + Copilot Chat */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col border-x border-border/40 bg-gradient-to-b from-background/60 to-background">
           <Tabs
             value={state.activeTab}
             onValueChange={(v) => dispatch({ type: "SET_ACTIVE_TAB", tab: v as "briefpack" | "copilot" })}
             className="flex-1 flex flex-col min-h-0"
           >
-            <div className="px-3 pt-2 shrink-0 border-b bg-card">
-              <TabsList>
-                <TabsTrigger value="briefpack" className="text-xs">Brief Pack</TabsTrigger>
-                <TabsTrigger value="copilot" className="text-xs">Copilot Chat</TabsTrigger>
+            <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/70 bg-card/75 backdrop-blur-sm">
+              <TabsList className="h-10 border border-border/70 bg-secondary/70">
+                <TabsTrigger value="briefpack" className="text-xs font-medium">Portfolio Brief</TabsTrigger>
+                <TabsTrigger value="copilot" className="text-xs font-medium">Fund Copilot</TabsTrigger>
               </TabsList>
             </div>
 
@@ -420,7 +417,6 @@ export default function BriefPage() {
           </Tabs>
         </div>
 
-        {/* Right Rail */}
         <RightRail
           isCollapsed={state.rightRailCollapsed}
           onToggle={() => dispatch({ type: "TOGGLE_RIGHT_RAIL" })}

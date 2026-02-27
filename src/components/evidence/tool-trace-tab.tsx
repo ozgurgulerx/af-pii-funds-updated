@@ -21,10 +21,8 @@ export function ToolTraceTab({ steps, auditMode }: ToolTraceTabProps) {
   return (
     <ScrollArea className="h-full">
       <div className="p-3 space-y-4">
-        {/* Vertical timeline */}
-        <div className="relative">
-          {/* Connecting line */}
-          <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+        <div className="relative rounded-lg border border-border/80 bg-background/55 p-3">
+          <div className="absolute left-[19px] top-5 bottom-6 w-px bg-border" />
 
           <div className="space-y-4">
             {steps.map((step) => (
@@ -33,8 +31,7 @@ export function ToolTraceTab({ steps, auditMode }: ToolTraceTabProps) {
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="border-t pt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="border-t border-border/70 pt-2 flex items-center justify-between text-[10px] text-muted-foreground">
           <span>{steps.length} steps</span>
           <span>{steps.reduce((acc, s) => acc + s.durationMs, 0)}ms total</span>
           {auditMode && (

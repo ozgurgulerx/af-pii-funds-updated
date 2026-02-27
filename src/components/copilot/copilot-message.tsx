@@ -26,10 +26,10 @@ export function CopilotMessageComponent({ message, activeCitationId, onCitationC
     >
       <div
         className={cn(
-          "max-w-[85%] rounded-xl px-4 py-3 transition-shadow duration-200",
+          "max-w-[86%] rounded-xl px-4 py-3 transition-shadow duration-200 border",
           isUser
-            ? "bg-primary/10 text-foreground shadow-subtle"
-            : "bg-card border shadow-subtle hover:shadow-elevated"
+            ? "bg-primary/10 border-primary/35 text-foreground shadow-subtle"
+            : "bg-card/90 border-border/80 shadow-subtle hover:shadow-elevated"
         )}
       >
         {/* Intent + Policy header for assistant messages */}
@@ -38,7 +38,7 @@ export function CopilotMessageComponent({ message, activeCitationId, onCitationC
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="flex items-center gap-2 mb-2"
+            className="flex items-center gap-2 mb-2 pb-2 border-b border-border/70"
           >
             <IntentBadge intent={message.intent} />
             <PolicySummary policyName={message.policyName} />

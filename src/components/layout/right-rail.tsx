@@ -37,12 +37,11 @@ export function RightRail({
 }: RightRailProps) {
   return (
     <motion.aside
-      animate={{ width: isCollapsed ? 56 : 360 }}
+      animate={{ width: isCollapsed ? 58 : 380 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="h-full border-l bg-card flex flex-col shrink-0 overflow-hidden"
+      className="h-full border-l border-border/70 bg-card/90 flex flex-col shrink-0 overflow-hidden"
     >
-      {/* Toggle button */}
-      <div className="h-10 flex items-center justify-center shrink-0 border-b">
+      <div className="h-11 flex items-center justify-center shrink-0 border-b border-border/70">
         <Button variant="ghost" size="icon-sm" onClick={onToggle}>
           {isCollapsed ? <PanelRight className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
         </Button>
@@ -50,13 +49,13 @@ export function RightRail({
 
       {!isCollapsed && (
         <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col min-h-0">
-          <div className="px-3 pt-2 shrink-0">
-            <TabsList className="w-full">
-              <TabsTrigger value="evidence" className="flex-1 text-xs">Evidence</TabsTrigger>
-              <TabsTrigger value="tooltrace" className="flex-1 text-xs">Tool Trace</TabsTrigger>
+          <div className="px-3 pt-3 shrink-0">
+            <TabsList className="w-full h-10 bg-secondary/70 border border-border/70">
+              <TabsTrigger value="evidence" className="flex-1 text-xs font-medium">Evidence</TabsTrigger>
+              <TabsTrigger value="tooltrace" className="flex-1 text-xs font-medium">Execution Trace</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="evidence" className="flex-1 min-h-0 mt-0">
+          <TabsContent value="evidence" className="flex-1 min-h-0 mt-2">
             <EvidenceTab
               citations={citations}
               sourcesUsed={sourcesUsed}
@@ -65,7 +64,7 @@ export function RightRail({
               onCitationClick={onCitationClick}
             />
           </TabsContent>
-          <TabsContent value="tooltrace" className="flex-1 min-h-0 mt-0">
+          <TabsContent value="tooltrace" className="flex-1 min-h-0 mt-2">
             <ToolTraceTab steps={toolTrace} auditMode={auditMode} />
           </TabsContent>
         </Tabs>

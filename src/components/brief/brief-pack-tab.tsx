@@ -32,7 +32,7 @@ export function BriefPackTab({
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-3">
+      <div className="p-4">
         <Accordion type="multiple" defaultValue={allSectionIds}>
           {briefPack.sections.map((section) => (
             <BriefSectionComponent

@@ -34,17 +34,17 @@ export function BriefSectionComponent({
   onCitationClick,
 }: BriefSectionProps) {
   return (
-    <AccordionItem value={section.id}>
-      <AccordionTrigger className="hover:no-underline px-3 gap-2">
+    <AccordionItem value={section.id} className="mb-3 rounded-xl border border-border/80 bg-card/80 shadow-subtle">
+      <AccordionTrigger className="hover:no-underline px-4 gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <SeverityBadge severity={section.severity} />
           <span className="text-sm font-medium truncate">{section.title}</span>
-          <span className="text-[10px] text-muted-foreground ml-auto mr-2 shrink-0">
+          <span className="text-[10px] text-muted-foreground ml-auto mr-2 shrink-0 font-mono">
             {timeAgo(section.lastUpdated)}
           </span>
         </div>
       </AccordionTrigger>
-      <AccordionContent className="px-3">
+      <AccordionContent className="px-4">
         <div className="markdown-content">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -82,7 +82,7 @@ export function BriefSectionComponent({
           </ReactMarkdown>
         </div>
 
-        <div className="flex items-center justify-between mt-3 pt-3 border-t">
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/70">
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Checkbox
               checked={section.isReviewed}
@@ -91,9 +91,9 @@ export function BriefSectionComponent({
             Reviewed
           </label>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="text-xs h-7"
+            className="text-xs h-7 border-primary/35 bg-primary/5 hover:bg-primary/10"
             onClick={() => onRegenerate(section.id)}
           >
             <RefreshCw className="h-3 w-3 mr-1" />

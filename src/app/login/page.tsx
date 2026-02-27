@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Plane, Shield, ArrowRight } from "lucide-react";
+import { LineChart, Shield, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -19,7 +19,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-brand/5" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-accent/10" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -27,18 +27,18 @@ export default function LoginPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md px-4"
       >
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card className="border-border/70 bg-card/90 backdrop-blur-sm shadow-elevated">
           <CardHeader className="text-center space-y-4 pb-2">
             <div className="mx-auto w-16 h-16 rounded-2xl bg-primary flex items-center justify-center">
-              <Plane className="w-8 h-8 text-primary-foreground" />
+              <LineChart className="w-8 h-8 text-primary-foreground" />
             </div>
 
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold tracking-tight text-primary">
-                Briefing Copilot
+                Fund Assistant
               </h1>
               <p className="text-sm text-muted-foreground">
-                AI-powered pilot briefing assistant
+                Institutional-grade portfolio intelligence workspace
               </p>
             </div>
           </CardHeader>
@@ -57,7 +57,7 @@ export default function LoginPage() {
                 />
               ) : (
                 <>
-                  Sign in with Crew SSO
+                  Sign in with Enterprise SSO
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </>
               )}
@@ -69,20 +69,20 @@ export default function LoginPage() {
               </div>
               <div className="relative flex justify-center text-xs">
                 <span className="bg-card px-2 text-muted-foreground">
-                  Airline Operations Portal
+                  Fund Operations Portal
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
               <Shield className="w-3.5 h-3.5" />
-              <span>Secure Crew Authentication</span>
+              <span>Secure Institutional Authentication</span>
             </div>
           </CardContent>
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Authorized airline personnel only
+          Authorized portfolio and operations personnel only
         </p>
       </motion.div>
     </div>

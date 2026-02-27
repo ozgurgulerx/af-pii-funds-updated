@@ -9,17 +9,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-subtle hover:bg-primary/90 active:scale-[0.98]",
+          "bg-primary text-primary-foreground shadow-subtle hover:bg-primary/90 active:scale-[0.985]",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-subtle hover:bg-destructive/90 active:scale-[0.98]",
+          "bg-destructive text-destructive-foreground shadow-subtle hover:bg-destructive/90 active:scale-[0.985]",
         outline:
-          "border border-input bg-background shadow-subtle hover:bg-accent hover:text-accent-foreground active:scale-[0.98]",
+          "border border-input bg-background shadow-subtle hover:bg-accent/10 hover:text-foreground active:scale-[0.985]",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-subtle hover:bg-secondary/80 active:scale-[0.98]",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+          "bg-secondary text-secondary-foreground shadow-subtle hover:bg-secondary/80 active:scale-[0.985]",
+        ghost: "hover:bg-primary/10 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        gold: "bg-gold text-background shadow-subtle hover:bg-gold/90 active:scale-[0.98]",
-        brand: "bg-brand text-white shadow-subtle hover:bg-brand/90 active:scale-[0.98]",
+        gold: "bg-gold text-background shadow-subtle hover:bg-gold/90 active:scale-[0.985]",
+        brand: "bg-brand text-white shadow-subtle hover:bg-brand/90 active:scale-[0.985]",
       },
       size: {
         default: "h-10 px-4 py-2",

@@ -30,7 +30,7 @@ export function FollowUpChips({ suggestions, onSelect, isVisible }: FollowUpChip
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-7 rounded-full border-primary/20 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all duration-200"
+                className="text-xs h-7 rounded-full border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/15 hover:text-primary transition-all duration-200"
                 onClick={() => onSelect(s)}
               >
                 {s}

@@ -41,10 +41,9 @@ export function EvidenceTab({
   return (
     <ScrollArea className="h-full">
       <div className="p-3 space-y-4">
-        {/* Sources chips */}
         {sourcesUsed.length > 0 && (
-          <div>
-            <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+          <div className="rounded-lg border border-border/80 bg-background/55 p-3">
+            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.16em] mb-2">
               Sources Used
             </h4>
             <div className="flex flex-wrap gap-1">
@@ -61,15 +60,14 @@ export function EvidenceTab({
           </div>
         )}
 
-        {/* Artifacts */}
         {artifacts.length > 0 && (
-          <div>
-            <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+          <div className="rounded-lg border border-border/80 bg-background/55 p-3">
+            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.16em] mb-2">
               Artifacts
             </h4>
             <div className="flex gap-2">
               {artifacts.map((a) => (
-                <span key={a.type} className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                <span key={a.type} className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded border border-border/70">
                   {a.label}: {a.count}
                 </span>
               ))}
@@ -77,10 +75,9 @@ export function EvidenceTab({
           </div>
         )}
 
-        {/* Citations list */}
         {citations.length > 0 && (
           <div>
-            <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.16em] mb-1.5">
               Citations ({citations.length})
             </h4>
             <div className="space-y-2">
