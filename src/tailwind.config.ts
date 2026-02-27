@@ -70,9 +70,12 @@ const config: Config = {
       animation: {
         "fade-in": "fadeIn 0.3s ease-out",
         "slide-up": "slideUp 0.3s ease-out",
+        "slide-in-left": "slideInLeft 0.3s ease-out",
         "pulse-subtle": "pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "accordion-down": "accordionDown 0.2s ease-out",
         "accordion-up": "accordionUp 0.2s ease-out",
+        "message-in": "messageIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+        "scale-in": "scaleIn 0.2s ease-out",
       },
       keyframes: {
         fadeIn: {
@@ -82,6 +85,10 @@ const config: Config = {
         slideUp: {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        slideInLeft: {
+          "0%": { opacity: "0", transform: "translateX(-8px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
         },
         pulseSubtle: {
           "0%, 100%": { opacity: "1" },
@@ -94,6 +101,14 @@ const config: Config = {
         accordionUp: {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
+        },
+        messageIn: {
+          "0%": { opacity: "0", transform: "translateY(12px) scale(0.97)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        scaleIn: {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
         },
       },
     },

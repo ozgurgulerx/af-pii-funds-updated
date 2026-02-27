@@ -40,25 +40,31 @@ export function MessageComposer({ onSubmit, isLoading, disabled }: MessageCompos
   };
 
   return (
-    <div className="border-t bg-card px-3 py-2 shrink-0">
-      <div className="flex items-end gap-2">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask the Copilot..."
-          disabled={isLoading || disabled}
-          rows={1}
-          className="flex-1 resize-none bg-background rounded-lg border border-input px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 min-h-[36px] max-h-[120px]"
-        />
+    <div className="border-t bg-card/80 backdrop-blur-sm px-3 py-2.5 shrink-0">
+      <div className="flex items-end gap-2 max-w-none">
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask the Copilot..."
+            disabled={isLoading || disabled}
+            rows={1}
+            className="w-full resize-none bg-background rounded-xl border border-input px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 min-h-[40px] max-h-[120px] transition-all duration-200"
+          />
+        </div>
         <Button
           size="icon-sm"
           onClick={handleSubmit}
           disabled={!input.trim() || isLoading || disabled}
-          className="shrink-0"
+          className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md disabled:shadow-none"
         >
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
         </Button>
       </div>
     </div>

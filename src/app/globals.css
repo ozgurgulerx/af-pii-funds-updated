@@ -4,59 +4,59 @@
 
 @layer base {
   :root {
-    /* SunExpress Briefing Copilot - Light Theme */
-    --background: 216 30% 97%;
-    --foreground: 220 40% 10%;
+    /* Fund RAG Copilot - Green Theme (Light) */
+    --background: 140 20% 97%;
+    --foreground: 150 30% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 220 40% 10%;
+    --card-foreground: 150 30% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 40% 10%;
-    --primary: 213 95% 28%;
+    --popover-foreground: 150 30% 8%;
+    --primary: 136 28% 35%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 216 20% 94%;
-    --secondary-foreground: 213 95% 28%;
-    --muted: 216 15% 92%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 24 84% 48%;
+    --secondary: 140 15% 93%;
+    --secondary-foreground: 136 28% 35%;
+    --muted: 140 12% 91%;
+    --muted-foreground: 150 8% 42%;
+    --accent: 142 35% 42%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 213 95% 28%;
-    --brand: 24 84% 48%;
-    --brand-muted: 24 60% 65%;
+    --border: 145 10% 89%;
+    --input: 145 10% 89%;
+    --ring: 136 28% 35%;
+    --brand: 136 28% 42%;
+    --brand-muted: 136 20% 60%;
     --surface-1: 0 0% 100%;
-    --surface-2: 216 25% 96%;
-    --surface-3: 216 20% 93%;
+    --surface-2: 140 18% 96%;
+    --surface-3: 140 14% 93%;
     --radius: 0.625rem;
   }
 
   .dark {
-    --background: 220 20% 10%;
-    --foreground: 216 20% 92%;
-    --card: 220 15% 14%;
-    --card-foreground: 216 20% 92%;
-    --popover: 220 15% 14%;
-    --popover-foreground: 216 20% 92%;
-    --primary: 213 80% 55%;
+    --background: 150 15% 8%;
+    --foreground: 140 15% 92%;
+    --card: 150 12% 12%;
+    --card-foreground: 140 15% 92%;
+    --popover: 150 12% 12%;
+    --popover-foreground: 140 15% 92%;
+    --primary: 136 35% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 12% 18%;
-    --secondary-foreground: 216 20% 85%;
-    --muted: 220 10% 20%;
-    --muted-foreground: 216 10% 55%;
-    --accent: 24 80% 52%;
+    --secondary: 150 10% 16%;
+    --secondary-foreground: 140 15% 85%;
+    --muted: 150 8% 18%;
+    --muted-foreground: 140 8% 55%;
+    --accent: 142 30% 48%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 45%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 10% 22%;
-    --input: 220 10% 22%;
-    --ring: 213 80% 55%;
-    --brand: 24 80% 52%;
-    --brand-muted: 24 50% 40%;
-    --surface-1: 220 15% 14%;
-    --surface-2: 220 12% 17%;
-    --surface-3: 220 10% 20%;
+    --border: 150 8% 20%;
+    --input: 150 8% 20%;
+    --ring: 136 35% 52%;
+    --brand: 136 30% 48%;
+    --brand-muted: 136 20% 35%;
+    --surface-1: 150 12% 12%;
+    --surface-2: 150 10% 15%;
+    --surface-3: 150 8% 18%;
   }
 }
 
@@ -215,15 +215,92 @@
   @apply bg-red-950/50 text-red-400 border-red-800;
 }
 
-/* ── Blinking cursor for streaming ──────────────────────── */
+/* ── Streaming Text Animation ──────────────────────────── */
 
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-.streaming-cursor::after {
-  content: "\25AE";
-  animation: blink 1s step-end infinite;
-  @apply text-primary ml-0.5;
+@keyframes fadeInWord {
+  0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
+  100% { opacity: 1; filter: blur(0); transform: translateY(0); }
 }
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes cursorBlink {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.streaming-container {
+  position: relative;
+}
+
+.streaming-container::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: hsl(var(--primary));
+  animation: cursorBlink 0.8s ease-in-out infinite;
+}
+
+/* Word-by-word reveal animation */
+.stream-word {
+  display: inline;
+  animation: fadeInWord 0.3s ease-out forwards;
+}
+
+/* Shimmer overlay on the last line of streaming text */
+.streaming-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.streaming-shimmer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--primary) / 0.06) 40%,
+    hsl(var(--primary) / 0.12) 50%,
+    hsl(var(--primary) / 0.06) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: var(--radius);
+}
+
+/* Thinking dots animation */
+@keyframes thinkingDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.thinking-dots span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  margin: 0 2px;
+  animation: thinkingDot 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.16s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.32s; }

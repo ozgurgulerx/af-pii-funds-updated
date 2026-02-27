@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { IntentBadge } from "./intent-badge";
@@ -17,21 +18,31 @@ export function CopilotMessageComponent({ message, activeCitationId, onCitationC
   const isUser = message.role === "user";
 
   return (
-    <div className={cn("flex gap-3 animate-fade-in", isUser ? "justify-end" : "justify-start")}>
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}
+    >
       <div
         className={cn(
-          "max-w-[85%] rounded-xl px-4 py-3",
+          "max-w-[85%] rounded-xl px-4 py-3 transition-shadow duration-200",
           isUser
-            ? "bg-brand/10 text-foreground"
-            : "bg-card border"
+            ? "bg-primary/10 text-foreground shadow-subtle"
+            : "bg-card border shadow-subtle hover:shadow-elevated"
         )}
       >
         {/* Intent + Policy header for assistant messages */}
         {!isUser && message.intent && (
-          <div className="flex items-center gap-2 mb-2">
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex items-center gap-2 mb-2"
+          >
             <IntentBadge intent={message.intent} />
             <PolicySummary policyName={message.policyName} />
-          </div>
+          </motion.div>
         )}
 
         {/* Message content */}
@@ -71,6 +82,6 @@ export function CopilotMessageComponent({ message, activeCitationId, onCitationC
           </ReactMarkdown>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,6 +17,35 @@ interface CopilotChatTabProps {
   progressSteps: ToolTraceStep[];
   activeCitationId: number | null;
   onCitationClick: (id: number) => void;
+}
+
+function StreamingText({ content }: { content: string }) {
+  return (
+    <div className="streaming-container markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => {
+            if (typeof children === "string") {
+              const wordParts = children.split(/(\s+)/);
+              return (
+                <p>
+                  {wordParts.map((word, i) => (
+                    <span key={i} className="stream-word" style={{ animationDelay: `${Math.max(0, i - wordParts.length + 6) * 30}ms` }}>
+                      {word}
+                    </span>
+                  ))}
+                </p>
+              );
+            }
+            return <p>{children}</p>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export function CopilotChatTab({
@@ -41,8 +70,13 @@ export function CopilotChatTab({
     <ScrollArea className="h-full" ref={scrollRef}>
       <div className="p-4 space-y-4">
         {messages.length === 0 && !isLoading && (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            Ask the Copilot a question or use a Quick Action.
+          <div className="flex flex-col items-center justify-center h-40 gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Ask the Copilot a question or use a Quick Action.
+            </p>
           </div>
         )}
 
@@ -59,26 +93,40 @@ export function CopilotChatTab({
         <AnimatePresence>
           {isLoading && progressSteps.length > 0 && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="bg-card border rounded-xl px-4 py-3 space-y-1.5"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-card border rounded-xl px-4 py-3 space-y-1.5 shadow-subtle"
             >
-              {progressSteps.map((step) => (
+              {progressSteps.map((step, i) => (
                 <motion.div
                   key={step.id}
-                  initial={{ opacity: 0, x: -8 }}
+                  initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05, duration: 0.25 }}
                   className="flex items-center gap-2 text-xs"
                 >
                   {step.status === "completed" ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                    </motion.div>
                   ) : (
                     <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
                   )}
                   <span className="text-muted-foreground font-mono">{step.toolName}</span>
                   {step.status === "completed" && (
-                    <span className="text-[10px] text-muted-foreground/60">{step.durationMs}ms</span>
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-[10px] text-muted-foreground/60"
+                    >
+                      {step.durationMs}ms
+                    </motion.span>
                   )}
                 </motion.div>
               ))}
@@ -86,22 +134,42 @@ export function CopilotChatTab({
           )}
         </AnimatePresence>
 
-        {/* Streaming content */}
+        {/* Thinking indicator */}
+        {isLoading && !streamingContent && progressSteps.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-card border rounded-xl px-4 py-3 shadow-subtle inline-block"
+          >
+            <div className="thinking-dots flex items-center gap-0.5">
+              <span />
+              <span />
+              <span />
+            </div>
+          </motion.div>
+        )}
+
+        {/* Streaming content with modern animation */}
         {isLoading && streamingContent && (
-          <div className="bg-card border rounded-xl px-4 py-3">
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-card border rounded-xl px-4 py-3 shadow-subtle streaming-shimmer"
+          >
             {streamingMeta?.intent && (
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-2 mb-2"
+              >
+                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                   {streamingMeta.intent}
                 </span>
-              </div>
+              </motion.div>
             )}
-            <div className="markdown-content streaming-cursor">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {streamingContent}
-              </ReactMarkdown>
-            </div>
-          </div>
+            <StreamingText content={streamingContent} />
+          </motion.div>
         )}
       </div>
     </ScrollArea>
