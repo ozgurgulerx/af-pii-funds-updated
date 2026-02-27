@@ -143,16 +143,20 @@ class UnifiedRetriever:
         if self.use_postgres:
             import psycopg2
             import psycopg2.extras
+            pg_database = os.getenv("PGDATABASE", "fundrag")
+            # nport_funds schema lives in 'fundrag' database, not 'postgres'
+            if pg_database == "postgres":
+                pg_database = "fundrag"
             self.db = psycopg2.connect(
                 host=os.getenv("PGHOST"),
                 port=int(os.getenv("PGPORT", 5432)),
-                database=os.getenv("PGDATABASE", "fundrag"),
+                database=pg_database,
                 user=os.getenv("PGUSER"),
                 password=os.getenv("PGPASSWORD"),
                 sslmode="require"
             )
             self.db.autocommit = True
-            print(f"Connected to PostgreSQL: {os.getenv('PGHOST')}/{os.getenv('PGDATABASE', 'fundrag')}")
+            print(f"Connected to PostgreSQL: {os.getenv('PGHOST')}/{pg_database}")
         else:
             # SQLite - check_same_thread=False allows use across Flask threads
             self.db = sqlite3.connect(str(DB_PATH), check_same_thread=False)
@@ -578,15 +582,30 @@ Return specific fund selection criteria in 2-3 sentences."""
             messages=[
                 {"role": "system", "content": "You are a fund analyst deriving investment criteria from economic outlook."},
                 {"role": "user", "content": criteria_prompt}
-            ]
+            ],
+            timeout=30
         )
 
         criteria = criteria_response.choices[0].message.content
 
-        # Step 3: Use criteria to query funds
+        # Step 3: Use criteria to query funds (parallel with timeouts)
         fund_query = f"{query}\n\nBased on analysis: {criteria}"
-        sql_results, sql_query, sql_citations = self.query_sql(fund_query)
-        semantic_results, semantic_citations = self.query_semantic(fund_query, top=3)
+        sql_results, sql_query, sql_citations = [], None, []
+        semantic_results, semantic_citations = [], []
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            sql_future = executor.submit(self.query_sql, fund_query)
+            semantic_future = executor.submit(self.query_semantic, fund_query, 3)
+
+            try:
+                sql_results, sql_query, sql_citations = sql_future.result(timeout=30)
+            except Exception as e:
+                print(f"SQL query error in CHAIN execution: {e}")
+
+            try:
+                semantic_results, semantic_citations = semantic_future.result(timeout=30)
+            except Exception as e:
+                print(f"Semantic query error in CHAIN execution: {e}")
 
         # Step 4: Synthesize final answer
         context = {

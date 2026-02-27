@@ -147,7 +147,8 @@ class QueryRouter:
             "similar to", "like", "resemble", "style",
             "conservative", "aggressive", "growth-oriented", "income-focused",
             "tell me about", "describe", "what kind of", "aligned with",
-            "fit", "match", "suited for", "appropriate for"
+            "fit", "match", "suited for", "appropriate for",
+            "defensive", "income-generating", "diversified"
         ]
         has_style = any(kw in query_lower for kw in style_keywords)
 
@@ -156,7 +157,10 @@ class QueryRouter:
             "imf", "inflation", "economic outlook", "interest rate forecast",
             "gdp", "growth forecast", "monetary policy", "fed", "central bank",
             "recession", "emerging market outlook", "world economic",
-            "rate environment", "current environment", "economic conditions"
+            "rate environment", "current environment", "economic conditions",
+            "economic times", "slowdown", "economic slowdown", "uncertain",
+            "macro", "geopolitical", "global outlook", "rate cycle",
+            "tightening", "easing", "dovish", "hawkish"
         ]
         has_macro = any(kw in query_lower for kw in raptor_keywords)
 
@@ -174,6 +178,16 @@ class QueryRouter:
         fund_keywords = ["fund", "invest", "portfolio", "position", "best", "recommend"]
         has_fund = any(kw in query_lower for kw in fund_keywords)
 
+        # Check if macro context is explicitly stated (HYBRID, not CHAIN)
+        # Explicit = numbers with units, or directional statements like "rising rates"
+        import re
+        has_explicit_macro = bool(re.search(
+            r'\d+\.?\d*\s*(%|percent|basis points|bps|bp)', query_lower
+        )) or bool(re.search(
+            r'(rising|falling|declining|increasing|decreasing|high|low)\s+(rate|inflation|interest)',
+            query_lower
+        ))
+
         # Route decision logic
         if has_macro:
             if has_fund:
@@ -181,6 +195,9 @@ class QueryRouter:
                 if has_style and not has_sql:
                     # Style + macro = SEMANTIC_RAPTOR
                     return "SEMANTIC_RAPTOR"
+                # If macro context has explicit numbers, use HYBRID (no need to look up)
+                if has_explicit_macro:
+                    return "HYBRID"
                 # CHAIN: when macro context needs to be looked up first
                 chain_triggers = ["if", "given", "based on", "considering", "current", "environment", "outlook"]
                 if any(cond in query_lower for cond in chain_triggers):
