@@ -1,21 +1,156 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { runMockAgent } from "@/lib/mock-agent";
-import { getFlightById } from "@/data/flights";
-import { createSSEMessage } from "@/lib/chat";
+import type { Citation } from "@/types";
 
-const MAX_MESSAGES = 50;
-const MAX_MESSAGE_LENGTH = 2000;
-
-const RequestSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(["user", "assistant"]),
-    content: z.string().max(MAX_MESSAGE_LENGTH),
-  })).min(1).max(MAX_MESSAGES),
-  flightId: z.string().max(32).optional(),
+const MessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
 });
 
+const RequestSchema = z.object({
+  messages: z.array(MessageSchema),
+  retrievalMode: z.enum(["code-rag", "foundry-iq"]).optional().default("code-rag"),
+});
+
+// Python backend URL - BACKEND_URL for Azure deployment, PYTHON_API_URL for local dev
+const PYTHON_API_URL = process.env.BACKEND_URL || process.env.PYTHON_API_URL || "http://localhost:5001";
+
+// Streaming text encoder
 const encoder = new TextEncoder();
+
+// Retry helper for transient backend failures
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) return response;
+
+      // Don't retry on client errors (4xx)
+      if (response.status >= 400 && response.status < 500) {
+        return response;
+      }
+
+      // Retry on server errors (5xx)
+      if (attempt === maxRetries) return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt === maxRetries) throw lastError;
+
+      // Exponential backoff: 500ms, 1000ms, 1500ms
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+  }
+
+  throw lastError || new Error("Max retries exceeded");
+}
+
+function createSSEMessage(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+// Helper to stream backend JSON result to client via SSE (word-by-word for typing effect)
+async function streamResultToClient(
+  controller: ReadableStreamDefaultController,
+  data: {
+    answer: string;
+    route: string;
+    reasoning?: string;
+    sql_query?: string;
+    citations?: Array<{
+      source_type: string;
+      identifier: string;
+      title: string;
+      content_preview: string;
+      score: number;
+    }>;
+    pii_blocked?: boolean;
+    pii_warning?: string;
+  }
+) {
+  // Check if PII was blocked
+  if (data.pii_blocked) {
+    controller.enqueue(
+      encoder.encode(
+        createSSEMessage({
+          type: "pii_blocked",
+          message: data.pii_warning || data.answer,
+        })
+      )
+    );
+  }
+
+  // Stream the response word by word
+  const responseText = data.answer;
+  const words = responseText.split(" ");
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] + (i < words.length - 1 ? " " : "");
+    controller.enqueue(
+      encoder.encode(
+        createSSEMessage({
+          type: "text",
+          content: word,
+        })
+      )
+    );
+    // Small delay for streaming effect
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  // Send route info
+  controller.enqueue(
+    encoder.encode(
+      createSSEMessage({
+        type: "metadata",
+        route: data.route,
+        reasoning: data.reasoning,
+        sql_query: data.sql_query,
+      })
+    )
+  );
+
+  // Send citations if any
+  if (data.citations && data.citations.length > 0) {
+    const formattedCitations: Citation[] = data.citations.map(
+      (c, idx) => ({
+        id: idx + 1,
+        provider: c.source_type,
+        dataset: c.source_type === "SQL" ? "nport_funds.db" :
+                 c.source_type === "SEMANTIC" ? "nport-funds-index" : "imf_raptor",
+        rowId: c.identifier,
+        timestamp: new Date().toISOString(),
+        confidence: c.score || 0.9,
+        excerpt: c.content_preview,
+      })
+    );
+
+    controller.enqueue(
+      encoder.encode(
+        createSSEMessage({
+          type: "citations",
+          citations: formattedCitations,
+        })
+      )
+    );
+  }
+
+  // Send completion signal
+  const isVerified = data.route === "FOUNDRY_IQ" || (data.citations && data.citations.length > 0);
+  controller.enqueue(
+    encoder.encode(
+      createSSEMessage({
+        type: "done",
+        isVerified,
+      })
+    )
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,7 +164,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, flightId } = parsed.data;
+    const { messages, retrievalMode } = parsed.data;
     const lastUserMessage = messages.filter((m) => m.role === "user").pop();
 
     if (!lastUserMessage) {
@@ -39,75 +174,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const flight = flightId ? getFlightById(flightId) : getFlightById("xq801");
-    if (!flight) {
-      return new Response(
-        JSON.stringify({ error: "Flight not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    const query = lastUserMessage.content;
 
-    const agentResponse = runMockAgent(lastUserMessage.content, flight);
-
+    // Create a streaming response
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // 1. Emit metadata
-          controller.enqueue(encoder.encode(createSSEMessage({
-            type: "metadata",
-            intent: agentResponse.intent,
-            policyName: agentResponse.policyName,
-            sourcesUsed: agentResponse.sourcesUsed,
-            artifacts: agentResponse.artifacts,
-          })));
+          // Call Python backend
+          controller.enqueue(
+            encoder.encode(
+              createSSEMessage({
+                type: "tool_call",
+                name: "fund_rag_query",
+                arguments: { query },
+              })
+            )
+          );
 
-          // 2. Emit progress steps (staggered)
-          for (const step of agentResponse.toolTrace) {
-            // Emit as "running"
-            controller.enqueue(encoder.encode(createSSEMessage({
-              type: "progress",
-              step: { ...step, status: "running" },
-            })));
-            await new Promise((r) => setTimeout(r, Math.min(step.durationMs / 3, 150)));
+          // Call the Python API with retry logic for transient failures
+          const response = await fetchWithRetry(`${PYTHON_API_URL}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: query,
+              use_llm_routing: true,  // Use LLM routing for accurate path detection
+              retrieval_mode: retrievalMode,
+            }),
+          });
 
-            // Emit as "completed"
-            controller.enqueue(encoder.encode(createSSEMessage({
-              type: "progress",
-              step: { ...step, status: "completed" },
-            })));
-            await new Promise((r) => setTimeout(r, 30));
+          if (!response.ok) {
+            throw new Error(`Python API error: ${response.status}`);
           }
 
-          // 3. Stream text word-by-word
-          const words = agentResponse.answer.split(" ");
-          for (let i = 0; i < words.length; i++) {
-            const word = words[i] + (i < words.length - 1 ? " " : "");
-            controller.enqueue(encoder.encode(createSSEMessage({
-              type: "text",
-              content: word,
-            })));
-            await new Promise((r) => setTimeout(r, 5));
-          }
-
-          // 4. Emit citations
-          controller.enqueue(encoder.encode(createSSEMessage({
-            type: "citations",
-            citations: agentResponse.citations,
-          })));
-
-          // 5. Emit done
-          controller.enqueue(encoder.encode(createSSEMessage({
-            type: "done",
-            followUps: agentResponse.followUps,
-          })));
-
+          // Backend always returns JSON - stream it to client via SSE
+          const data = await response.json();
+          await streamResultToClient(controller, data);
           controller.close();
         } catch (error) {
           console.error("Streaming error:", error);
-          controller.enqueue(encoder.encode(createSSEMessage({
-            type: "error",
-            message: error instanceof Error ? error.message : "Unknown error",
-          })));
+
+          // Check if it's a connection error to Python backend
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const isConnectionError = errorMessage.includes("ECONNREFUSED") ||
+                                    errorMessage.includes("fetch failed");
+
+          controller.enqueue(
+            encoder.encode(
+              createSSEMessage({
+                type: "error",
+                message: isConnectionError
+                  ? "Backend server not running. Please start the Python API server (python api_server.py)"
+                  : `Error: ${errorMessage}`,
+              })
+            )
+          );
           controller.close();
         }
       },
