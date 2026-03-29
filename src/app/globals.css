@@ -170,6 +170,21 @@
     box-shadow: 0 14px 34px -18px hsl(var(--primary) / 0.34);
   }
 
+  .chat-hero-shell {
+    background:
+      linear-gradient(180deg, hsl(var(--surface-canvas) / 0.98) 0%, hsl(var(--background) / 0.78) 100%);
+  }
+
+  .chat-hero-card {
+    background:
+      radial-gradient(circle at top left, hsl(var(--primary) / 0.18) 0%, transparent 34%),
+      radial-gradient(circle at top right, hsl(var(--accent) / 0.12) 0%, transparent 29%),
+      linear-gradient(135deg, hsl(0 0% 100% / 0.98), hsl(var(--surface-elevated) / 0.92));
+    box-shadow:
+      0 24px 60px -42px hsl(var(--primary) / 0.36),
+      0 16px 28px -24px rgb(15 23 42 / 0.18);
+  }
+
   .surface-1 {
     background-color: hsl(var(--surface-1));
   }
