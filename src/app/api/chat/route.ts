@@ -85,8 +85,13 @@ function mapRouteToRetrievalToolName(route: string, retrievalMode: RetrievalMode
       return "PostgreSQL (SQL Query)";
     case "FILTER_SEARCH":
       return "Azure AI Search (Filter)";
+    case "SEMANTIC":
     case "SEMANTIC_SEARCH":
       return "Azure AI Search (Semantic)";
+    case "RAPTOR":
+      return "Azure AI Search (Macro Reports)";
+    case "SEMANTIC_RAPTOR":
+      return "Azure AI Search (Semantic + Macro)";
     case "MARKET_SEARCH":
       return "Azure AI Search (Market)";
     case "HYBRID":
@@ -147,16 +152,21 @@ function normalizeTraceSteps(
   const validationSummary = citationsCount > 0
     ? `verified with ${citationsCount} citation(s)`
     : "verified without explicit citations";
+  const piiStep: ToolTraceStep = {
+    id: "pii-check",
+    toolName: "PII Detection",
+    status: "completed",
+    durationMs: 0,
+    inputSummary: `message length=${query.length} chars`,
+    outputSummary: data.pii_blocked ? `request blocked | ${data.pii_warning || ""}`.trim() : "clean input",
+  };
+
+  if (data.pii_blocked) {
+    return [piiStep];
+  }
 
   return [
-    {
-      id: "pii-check",
-      toolName: "PII Detection",
-      status: "completed",
-      durationMs: 0,
-      inputSummary: `message length=${query.length} chars`,
-      outputSummary: data.pii_blocked ? `request blocked | ${data.pii_warning || ""}`.trim() : "clean input",
-    },
+    piiStep,
     {
       id: "context-compaction",
       toolName: "Context Compaction",
@@ -266,26 +276,28 @@ async function streamResultToClient(
     )
   );
 
+  const hasBackendTrace = Array.isArray(data.tool_trace) && data.tool_trace.length > 0;
   const traceSteps = normalizeTraceSteps(data.tool_trace, query, retrievalMode, data, messageCount);
   for (const step of traceSteps) {
+    if (!hasBackendTrace && step.status !== "running") {
+      controller.enqueue(
+        encoder.encode(
+          createSSEMessage({
+            type: "progress",
+            step: { ...step, status: "running" },
+          })
+        )
+      );
+    }
+
     controller.enqueue(
       encoder.encode(
         createSSEMessage({
           type: "progress",
-          step: { ...step, status: "running" },
+          step,
         })
       )
     );
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    controller.enqueue(
-      encoder.encode(
-        createSSEMessage({
-          type: "progress",
-          step: { ...step, status: step.status === "error" ? "error" : "completed" },
-        })
-      )
-    );
-    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   // Stream the response word by word
