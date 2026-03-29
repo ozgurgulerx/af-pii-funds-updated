@@ -19,7 +19,7 @@ export function ToggleGroup({
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-lg bg-surface-2 p-1 border border-border",
+        "inline-flex items-center rounded-full border border-border/80 bg-background/80 p-1 shadow-subtle backdrop-blur-sm",
         className
       )}
     >
@@ -28,9 +28,9 @@ export function ToggleGroup({
           key={option.value}
           onClick={() => onValueChange(option.value)}
           className={cn(
-            "px-3 py-1 text-xs font-medium rounded-md transition-all",
+            "rounded-full px-3 py-1.5 text-[11px] font-medium transition-all",
             value === option.value
-              ? "bg-gold text-background shadow-sm"
+              ? "bg-primary text-primary-foreground shadow-subtle"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
