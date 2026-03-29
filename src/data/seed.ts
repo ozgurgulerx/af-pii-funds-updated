@@ -1,5 +1,17 @@
 import type { Conversation, Message, Citation, WatchlistItem } from "@/types";
 
+export type HeroProfileId = "balanced" | "momentum" | "defensive" | "aggressive";
+
+export interface HeroProfileSuggestion {
+  id: HeroProfileId;
+  label: string;
+  code: string;
+  fundName: string;
+  badge: string;
+  summary: string;
+  query: string;
+}
+
 export const SAMPLE_CITATIONS: Citation[] = [
   {
     id: 1,
@@ -38,6 +50,45 @@ export const SAMPLE_CITATIONS: Citation[] = [
     excerpt: "Fidelity Contrafund - NVIDIA Corp (CUSIP: 67066G104) - 4.2% of portfolio",
   },
 ];
+
+export const HERO_PROFILE_SUGGESTIONS: HeroProfileSuggestion[] = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    code: "VTBM",
+    fundName: "Vanguard Total Bond Market Index",
+    badge: "Risk 5/7",
+    summary: "A core allocation candidate when duration and credit quality need to stay balanced.",
+    query: "Give me a profile of Vanguard Total Bond Market Index and explain when it fits a balanced allocation.",
+  },
+  {
+    id: "momentum",
+    label: "Momentum",
+    code: "FCNT",
+    fundName: "Fidelity Contrafund",
+    badge: "AI-led",
+    summary: "A high-conviction growth fund when market leadership is still concentrated in AI-heavy exposures.",
+    query: "Why is Fidelity Contrafund a momentum-style pick right now, and what is driving its AI exposure?",
+  },
+  {
+    id: "defensive",
+    label: "Defensive",
+    code: "VSTB",
+    fundName: "Vanguard Short-Term Bond",
+    badge: "Risk 3/7",
+    summary: "A steadier sleeve when preserving liquidity and containing duration risk matters more than upside chase.",
+    query: "Summarize Vanguard Short-Term Bond and explain why it works as a defensive fund in the current rate backdrop.",
+  },
+  {
+    id: "aggressive",
+    label: "Aggressive",
+    code: "FOTC",
+    fundName: "Fidelity OTC Portfolio",
+    badge: "Risk 6/7",
+    summary: "A tactical higher-beta option when you want more concentrated participation in technology and growth.",
+    query: "Walk me through Fidelity OTC Portfolio as an aggressive fund idea and highlight the main concentration risks.",
+  },
+] as const;
 
 export const SAMPLE_CONVERSATIONS: Conversation[] = [
   {
