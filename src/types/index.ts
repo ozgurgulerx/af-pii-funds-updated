@@ -43,6 +43,16 @@ export interface ToolCall {
   result?: unknown;
 }
 
+export interface ToolTraceStep {
+  id: string;
+  toolName: string;
+  status: "running" | "completed" | "error";
+  durationMs: number;
+  inputSummary: string;
+  outputSummary: string;
+  tokensUsed?: number;
+}
+
 export interface Conversation {
   id: string;
   title: string;

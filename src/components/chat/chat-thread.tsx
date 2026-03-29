@@ -8,19 +8,24 @@ import {
   Loader2,
   ShieldCheck,
   Sparkles,
+  XCircle,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  localizeToolName,
+  localizeTraceInputSummary,
+  localizeTraceOutputSummary,
+} from "@/lib/tool-trace";
 import { Message } from "./message";
 import { ENHANCED_FOLLOW_UP_SUGGESTIONS } from "@/data/seed";
-import { cn } from "@/lib/utils";
-import type { Message as MessageType } from "@/types";
+import type { Message as MessageType, ToolTraceStep } from "@/types";
 
 interface ChatThreadProps {
   messages: MessageType[];
   isLoading: boolean;
   streamingContent?: string;
-  queryProgress?: { stage: string; message: string }[];
+  queryProgress?: ToolTraceStep[];
   onCitationClick?: (id: number) => void;
   activeCitationId?: number | null;
   onSendMessage?: (message: string) => void;
@@ -74,22 +79,38 @@ export function ChatThread({
                   </div>
                   <div className="w-full max-w-3xl rounded-[28px] border border-border/80 bg-card/90 px-4 py-4 shadow-subtle">
                     {queryProgress.length > 0 && (
-                      <div className="mb-3 space-y-2">
-                        {queryProgress.map((progress, index) => {
-                          const isLatest = index === queryProgress.length - 1;
-                          return (
-                            <div key={`${progress.stage}-${index}`} className="flex items-center gap-2 text-sm">
-                              {isLatest ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-signal-positive" />
-                              )}
-                              <span className={cn(isLatest ? "text-foreground" : "text-muted-foreground")}>
-                                {progress.message}
-                              </span>
+                      <div className="mb-3 rounded-[22px] border border-border/75 bg-background/68 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                        <div className="space-y-2.5">
+                          {queryProgress.map((step) => (
+                            <div key={step.id} className="flex items-start gap-2.5">
+                              <div className="mt-0.5 shrink-0">
+                                {step.status === "completed" ? (
+                                  <CheckCircle2 className="h-4 w-4 text-signal-positive" />
+                                ) : step.status === "error" ? (
+                                  <XCircle className="h-4 w-4 text-destructive" />
+                                ) : (
+                                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono text-[13px] text-foreground">
+                                    {localizeToolName(step.toolName)}
+                                  </span>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {step.durationMs}ms
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                  {localizeTraceInputSummary(step.inputSummary)}
+                                </p>
+                                <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground/88">
+                                  &rarr; {localizeTraceOutputSummary(step.outputSummary)}
+                                </p>
+                              </div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
                     )}
                     {streamingContent ? (
