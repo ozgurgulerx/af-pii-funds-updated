@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EyeOff,
   FileSearch,
@@ -31,6 +31,8 @@ import {
 import type { Citation, Message, ToolTraceStep } from "@/types";
 
 type RetrievalMode = "code-rag" | "foundry-iq";
+
+const HERO_SESSION_KEY = "af-pii-funds-updated:chat-hero-hidden";
 
 const HERO_FUND_TYPES = [
   {
@@ -84,6 +86,25 @@ export default function ChatPage() {
   const [showFollowUps, setShowFollowUps] = useState(true);
   const [heroDismissed, setHeroDismissed] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setHeroDismissed(window.sessionStorage.getItem(HERO_SESSION_KEY) === "1");
+  }, []);
+
+  const dismissHero = useCallback(() => {
+    setHeroDismissed(true);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(HERO_SESSION_KEY, "1");
+    }
+  }, []);
+
+  const resetHero = useCallback(() => {
+    setHeroDismissed(false);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(HERO_SESSION_KEY);
+    }
+  }, []);
+
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null);
     setMessages([]);
@@ -92,8 +113,8 @@ export default function ChatPage() {
     setShowFollowUps(false);
     setStreamingContent("");
     setMobileSidebarOpen(false);
-    setHeroDismissed(false);
-  }, []);
+    resetHero();
+  }, [resetHero]);
 
   const handleSelectConversation = useCallback((id: string) => {
     const conversation = SAMPLE_CONVERSATIONS.find((item) => item.id === id);
@@ -130,6 +151,7 @@ export default function ChatPage() {
     setQueryProgress([]);
     setShowFollowUps(false);
     setMobileSidebarOpen(false);
+    dismissHero();
 
     try {
       const response = await fetch("/api/chat", {
@@ -265,7 +287,7 @@ export default function ChatPage() {
       setStreamingContent("");
       setQueryProgress([]);
     }
-  }, [messages, retrievalMode]);
+  }, [dismissHero, messages, retrievalMode]);
 
   const quickPrompts = useMemo(
     () => ENHANCED_FOLLOW_UP_SUGGESTIONS.slice(0, 4).map((suggestion) => suggestion.text),
@@ -347,7 +369,7 @@ export default function ChatPage() {
     [activeCitationId, activeConversationId, citations.length, messages.length, retrievalMode]
   );
 
-  const showHero = !heroDismissed && !activeConversationId && messages.length === 0;
+  const showHero = !heroDismissed;
 
   return (
     <div className="relative flex h-full overflow-hidden">
@@ -402,7 +424,7 @@ export default function ChatPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setHeroDismissed(true)}
+                          onClick={dismissHero}
                           className="gap-2 bg-background/82"
                         >
                           <EyeOff className="h-3.5 w-3.5" />
