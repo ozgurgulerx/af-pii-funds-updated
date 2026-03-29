@@ -165,6 +165,18 @@ export default function ChatPage() {
     return { messageCitations, appendedCitations };
   }, []);
 
+  const rewriteCitationMarkers = useCallback((content: string, normalizedCitations: Citation[]) => {
+    if (!content || normalizedCitations.length === 0) {
+      return content;
+    }
+
+    return content.replace(/\[(\d+)\]/g, (_, value: string) => {
+      const citationIndex = Number.parseInt(value, 10) - 1;
+      const citation = normalizedCitations[citationIndex];
+      return citation ? `[${citation.id}]` : `[${value}]`;
+    });
+  }, []);
+
   const handleNewChat = useCallback(() => {
     if (requestInFlightRef.current) return;
 
@@ -324,6 +336,7 @@ export default function ChatPage() {
       };
 
       const { messageCitations, appendedCitations } = normalizeCitations(citations, nextCitations);
+      assistantMessage.content = rewriteCitationMarkers(fullContent, messageCitations);
       assistantMessage.citations = messageCitations;
 
       setMessages((previous) => [...previous, assistantMessage]);
@@ -354,7 +367,7 @@ export default function ChatPage() {
       setStreamingContent("");
       setQueryProgress([]);
     }
-  }, [citations, compactHero, messages, normalizeCitations, retrievalMode]);
+  }, [citations, compactHero, messages, normalizeCitations, retrievalMode, rewriteCitationMarkers]);
 
   const handleHeroProfileSelect = useCallback((query: string) => {
     if (isLoading) return;
@@ -453,7 +466,6 @@ export default function ChatPage() {
 
       <Sidebar
         isCollapsed={sidebarCollapsed}
-        isLoading={isLoading}
         onToggle={() => setSidebarCollapsed((previous) => !previous)}
         onSelectConversation={handleSelectConversation}
         activeConversationId={activeConversationId ?? undefined}
