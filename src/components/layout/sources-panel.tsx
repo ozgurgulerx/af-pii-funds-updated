@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileSearch,
   MenuSquare,
+  Workflow,
   Quote,
   X,
 } from "lucide-react";
@@ -13,12 +14,18 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDateTime } from "@/lib/utils";
-import type { Citation } from "@/types";
+import { ToolTraceTab } from "@/components/evidence/tool-trace-tab";
+import type { Citation, ToolTraceStep } from "@/types";
+
+type RightRailTab = "evidence" | "tooltrace";
 
 interface SourcesPanelProps {
   isCollapsed: boolean;
   onToggle: () => void;
   citations: Citation[];
+  toolTrace?: ToolTraceStep[];
+  activeTab?: RightRailTab;
+  onTabChange?: (tab: RightRailTab) => void;
   activeCitationId: number | null;
   onCitationClick: (id: number) => void;
   mobileOpen?: boolean;
@@ -29,6 +36,9 @@ function SourcesPanelBody({
   isCollapsed,
   onToggle,
   citations,
+  toolTrace = [],
+  activeTab = "evidence",
+  onTabChange,
   activeCitationId,
   onCitationClick,
   mobile = false,
@@ -36,6 +46,7 @@ function SourcesPanelBody({
 }: Omit<SourcesPanelProps, "mobileOpen"> & { mobile?: boolean }) {
   const showCollapsed = !mobile && isCollapsed;
   const activeCitation = citations.find((citation) => citation.id === activeCitationId) ?? null;
+  const focusedCount = activeTab === "tooltrace" ? toolTrace.length : (activeCitation ? activeCitation.id : 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -43,10 +54,12 @@ function SourcesPanelBody({
         <div className="flex items-center justify-between gap-2">
           <div className={cn("min-w-0", showCollapsed && "hidden")}>
             <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/70">
-              <FileSearch className="h-3.5 w-3.5" />
+              {activeTab === "tooltrace" ? <Workflow className="h-3.5 w-3.5" /> : <FileSearch className="h-3.5 w-3.5" />}
               Evidence Intelligence
             </div>
-            <p className="mt-1 text-sm font-medium text-foreground">Sources and provenance</p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {activeTab === "tooltrace" ? "Tool trace" : "Sources and provenance"}
+            </p>
           </div>
           {mobile && onMobileClose ? (
             <Button variant="outline" size="icon-sm" onClick={onMobileClose} aria-label="Close evidence">
@@ -65,15 +78,46 @@ function SourcesPanelBody({
             <div className="mt-1 font-display text-lg font-semibold">{citations.length}</div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-background/75 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Sources</div>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              {activeTab === "tooltrace" ? "Trace steps" : "Sources"}
+            </div>
             <div className="mt-1 font-display text-lg font-semibold">
-              {new Set(citations.map((citation) => citation.provider)).size}
+              {activeTab === "tooltrace"
+                ? toolTrace.length
+                : new Set(citations.map((citation) => citation.provider)).size}
             </div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-background/75 px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Focused</div>
-            <div className="mt-1 font-display text-lg font-semibold">{activeCitation ? activeCitation.id : 0}</div>
+            <div className="mt-1 font-display text-lg font-semibold">{focusedCount}</div>
           </div>
+        </div>
+
+        <div className={cn("mt-3 grid grid-cols-2 gap-2", showCollapsed && "hidden")}>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("evidence")}
+            className={cn(
+              "rounded-full border px-3 py-2 text-[11px] font-medium transition-colors",
+              activeTab === "evidence"
+                ? "border-primary/24 bg-primary/[0.08] text-primary"
+                : "border-border/70 bg-background/75 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Evidence
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("tooltrace")}
+            className={cn(
+              "rounded-full border px-3 py-2 text-[11px] font-medium transition-colors",
+              activeTab === "tooltrace"
+                ? "border-primary/24 bg-primary/[0.08] text-primary"
+                : "border-border/70 bg-background/75 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Tool trace
+          </button>
         </div>
       </div>
 
@@ -96,6 +140,8 @@ function SourcesPanelBody({
               </button>
             ))}
           </div>
+        ) : activeTab === "tooltrace" ? (
+          <ToolTraceTab steps={toolTrace} />
         ) : citations.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-border/80 bg-background/70 px-4 py-8 text-center">
             <MenuSquare className="mx-auto h-8 w-8 text-muted-foreground/55" />

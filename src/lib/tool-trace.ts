@@ -1,42 +1,42 @@
 import type { ToolTraceStep } from "@/types";
 
 const TOOL_NAME_LABELS: Record<string, string> = {
-  "Query Rewrite": "Soru Düzenleme",
-  "Query Analysis": "Sorgu Analizi",
-  "Intent Router V2": "Yönlendirme Karar Motoru",
-  "LLM Response Generation": "Yanıt Oluşturma",
-  "PII Detection": "Kişisel Veri Kontrolü",
-  "Context Compaction": "Bağlam Düzenleme",
+  "Query Rewrite": "Query Rewrite",
+  "Query Analysis": "Query Analysis",
+  "Intent Router V2": "Intent Router V2",
+  "LLM Response Generation": "LLM Response Generation",
+  "PII Detection": "PII Detection",
+  "Context Compaction": "Context Compaction",
   "Answer Brief Builder": "Answer Brief Builder",
   "Answer Validation": "Answer Validation",
-  "Azure AI Search (Filter)": "Azure AI Search (Filtreli Arama)",
-  "Azure AI Search (Semantic)": "Azure AI Search (Anlamsal Arama)",
-  "Azure AI Search (Semantic + Macro)": "Azure AI Search (Anlamsal + Makro)",
-  "Azure AI Search (Hybrid)": "Azure AI Search (Karma Arama)",
-  "Azure AI Search (Hybrid + Market)": "Azure AI Search (Karma + Piyasa)",
-  "Azure AI Search (Market)": "Azure AI Search (Piyasa)",
-  "Azure AI Search (Macro Reports)": "Azure AI Search (Makro Raporlar)",
-  "Azure AI Search (Agentic)": "Azure AI Search (Ajan Akışı)",
-  "PostgreSQL (SQL Query)": "PostgreSQL (SQL Sorgusu)",
-  "Chain (Market → Fund)": "Zincir Akış (Piyasa → Fon)",
+  "Azure AI Search (Filter)": "Azure AI Search (Filter)",
+  "Azure AI Search (Semantic)": "Azure AI Search (Semantic)",
+  "Azure AI Search (Semantic + Macro)": "Azure AI Search (Semantic + Macro)",
+  "Azure AI Search (Hybrid)": "Azure AI Search (Hybrid)",
+  "Azure AI Search (Hybrid + Market)": "Azure AI Search (Hybrid + Market)",
+  "Azure AI Search (Market)": "Azure AI Search (Market)",
+  "Azure AI Search (Macro Reports)": "Azure AI Search (Macro Reports)",
+  "Azure AI Search (Agentic)": "Azure AI Search (Agentic)",
+  "PostgreSQL (SQL Query)": "PostgreSQL (SQL Query)",
+  "Chain (Market → Fund)": "Chain (Market → Fund)",
   "Foundry IQ": "Foundry IQ",
 };
 
 const ROUTE_LABELS: Record<string, string> = {
   SQL: "SQL",
-  FILTER_SEARCH: "Filtreli Arama",
-  SEMANTIC: "Anlamsal Arama",
-  SEMANTIC_SEARCH: "Anlamsal Arama",
-  RAPTOR: "Makro Raporlar",
-  MARKET_SEARCH: "Piyasa",
-  SEMANTIC_RAPTOR: "Anlamsal + Makro",
-  HYBRID: "Karma Arama",
-  CHAIN: "Zincir Akış",
-  AGENTIC: "Ajan Akışı",
+  FILTER_SEARCH: "Filter Search",
+  SEMANTIC: "Semantic Search",
+  SEMANTIC_SEARCH: "Semantic Search",
+  RAPTOR: "Macro Reports",
+  MARKET_SEARCH: "Market Search",
+  SEMANTIC_RAPTOR: "Semantic + Macro",
+  HYBRID: "Hybrid Search",
+  CHAIN: "Chain",
+  AGENTIC: "Agentic",
   FOUNDRY_IQ: "Foundry IQ",
 };
 
-function localizeRouteLabel(route: string): string {
+export function localizeRouteLabel(route: string): string {
   return ROUTE_LABELS[route] ?? route;
 }
 
@@ -48,14 +48,14 @@ export function localizeTraceInputSummary(summary: string): string {
   let text = summary.trim();
   if (!text) return text;
 
-  text = text.replace(/^message inspection$/i, "mesaj incelemesi");
-  text = text.replace(/^history_len=(\d+)$/i, "geçmiş uzunluğu=$1");
-  text = text.replace(/^context_len=(\d+), history_len=(\d+)$/i, "bağlam uzunluğu=$1, geçmiş uzunluğu=$2");
-  text = text.replace(/^query:\s*/i, "sorgu: ");
-  text = text.replace(/^message length=(\d+) chars$/i, "mesaj uzunluğu=$1 karakter");
+  text = text.replace(/^message inspection$/i, "message inspection");
+  text = text.replace(/^history_len=(\d+)$/i, "history length=$1");
+  text = text.replace(/^context_len=(\d+), history_len=(\d+)$/i, "context length=$1, history length=$2");
+  text = text.replace(/^query:\s*/i, "query: ");
+  text = text.replace(/^message length=(\d+) chars$/i, "message length=$1 chars");
   text = text.replace(/^(\d+) messages, session=(.+)$/i, (_, count: string, session: string) => {
-    const normalizedSession = session === "single" ? "tek" : session;
-    return `${count} ileti, oturum=${normalizedSession}`;
+    const normalizedSession = session === "single" ? "single" : session;
+    return `${count} messages, session=${normalizedSession}`;
   });
 
   return text;
@@ -65,20 +65,21 @@ export function localizeTraceOutputSummary(summary: string): string {
   let text = summary.trim();
   if (!text) return text;
 
-  text = text.replace(/^clean input$/i, "Kişisel veri tespit edilmedi");
-  text = text.replace(/^single-session context preserved$/i, "Tüm ileti tek oturum bağlamında korundu");
-  text = text.replace(/^skipped: no_history$/i, "Atlandı: geçmiş yeterli değil");
-  text = text.replace(/^skipped: already standalone$/i, "Atlandı: soru zaten bağımsız");
+  text = text.replace(/^clean input$/i, "Clean input");
+  text = text.replace(/^single-session context preserved$/i, "Single-session context preserved");
+  text = text.replace(/^skipped: no_history$/i, "Skipped: no history");
+  text = text.replace(/^skipped: already standalone$/i, "Skipped: already standalone");
   text = text.replace(/route=(\w+)\s+confidence=([\d.]+);?\s*(.*)/i, (_, route: string, confidence: string, rest: string) => {
-    const localizedRest = rest?.trim() ? rest.trim() : "rota seçildi";
-    return `rota=${localizeRouteLabel(route)} güven=${confidence}; ${localizedRest}`;
+    const localizedRest = rest?.trim() ? rest.trim() : "route selected";
+    return `route=${localizeRouteLabel(route)} confidence=${confidence}; ${localizedRest}`;
   });
-  text = text.replace(/^(\d+)\s+citation\(s\)\s+prepared$/i, "$1 atıf hazırlandı");
-  text = text.replace(/^verified with (\d+) citation\(s\)$/i, "$1 atıf ile doğrulandı");
-  text = text.replace(/^verified without explicit citations$/i, "Açık atıf olmadan doğrulandı");
-  text = text.replace(/^response drafted from retrieved evidence$/i, "Yanıt taslağı bulunan kanıtlardan üretildi");
-  text = text.replace(/^summary composed from retrieved evidence$/i, "Yanıt özeti getirilen kanıtlardan derlendi");
-  text = text.replace(/^answer length=(\d+) chars$/i, "yanıt uzunluğu=$1 karakter");
+  text = text.replace(/^(\d+)\s+citation\(s\)\s+prepared$/i, "$1 citation(s) prepared");
+  text = text.replace(/^verified with (\d+) citation\(s\)$/i, "verified with $1 citation(s)");
+  text = text.replace(/^verified without explicit citations$/i, "verified without explicit citations");
+  text = text.replace(/^response drafted from retrieved evidence$/i, "response drafted from retrieved evidence");
+  text = text.replace(/^summary composed from retrieved evidence$/i, "summary composed from retrieved evidence");
+  text = text.replace(/^summary composed from model response$/i, "summary composed from model response");
+  text = text.replace(/^answer length=(\d+) chars$/i, "answer length=$1 chars");
 
   return text;
 }

@@ -32,10 +32,11 @@ import {
   SAMPLE_CONVERSATIONS,
   type HeroProfileId,
 } from "@/data/seed";
-import type { Citation, Message, ToolTraceStep } from "@/types";
+import type { Artifact, Citation, Message, PiiStatus, ToolTraceStep } from "@/types";
 
 type RetrievalMode = "code-rag" | "foundry-iq";
 type HeroDisplayMode = "expanded" | "compact";
+type RightRailTab = "evidence" | "tooltrace";
 
 const HERO_SESSION_KEY = "af-pii-funds-updated:chat-hero-mode";
 const HERO_TRANSITION = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
@@ -85,6 +86,7 @@ const HERO_PROFILE_META: Record<
 export default function ChatPage() {
   const prefersReducedMotion = useReducedMotion();
   const requestInFlightRef = useRef(false);
+  const rightTabManualRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -108,6 +110,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [queryProgress, setQueryProgress] = useState<ToolTraceStep[]>([]);
+  const [activeRightTab, setActiveRightTab] = useState<RightRailTab>("evidence");
   const [showFollowUps, setShowFollowUps] = useState(true);
 
   useEffect(() => {
@@ -152,6 +155,8 @@ export default function ChatPage() {
     setShowFollowUps(true);
     setStreamingContent("");
     setQueryProgress([]);
+    rightTabManualRef.current = false;
+    setActiveRightTab("evidence");
     setMobileSidebarOpen(false);
     return true;
   }, [getUniqueCitationsFromMessages]);
@@ -207,6 +212,9 @@ export default function ChatPage() {
     setActiveCitationId(null);
     setShowFollowUps(false);
     setStreamingContent("");
+    setQueryProgress([]);
+    rightTabManualRef.current = false;
+    setActiveRightTab("evidence");
     setMobileSidebarOpen(false);
     expandHero();
   }, [expandHero]);
@@ -232,7 +240,14 @@ export default function ChatPage() {
 
   const handleCitationClick = useCallback((id: number) => {
     setActiveCitationId((previous) => (previous === id ? null : id));
+    rightTabManualRef.current = true;
+    setActiveRightTab("evidence");
     setMobileEvidenceOpen(true);
+  }, []);
+
+  const handleRightTabChange = useCallback((tab: RightRailTab) => {
+    rightTabManualRef.current = true;
+    setActiveRightTab(tab);
   }, []);
 
   const handleSendMessage = useCallback(async (content: string) => {
@@ -253,7 +268,11 @@ export default function ChatPage() {
     setQueryProgress([]);
     setShowFollowUps(false);
     setMobileSidebarOpen(false);
+    rightTabManualRef.current = false;
+    setActiveRightTab("tooltrace");
     compactHero();
+
+    let traceSteps: ToolTraceStep[] = [];
 
     try {
       const response = await fetch("/api/chat", {
@@ -280,6 +299,12 @@ export default function ChatPage() {
       let nextCitations: Citation[] = [];
       let isVerified = false;
       let buffer = "";
+      let sourcesUsed: string[] = [];
+      let artifacts: Artifact[] = [];
+      let route: string | undefined;
+      let routeConfidence: number | undefined;
+      let routeReasoning: string | undefined;
+      let piiStatus: PiiStatus | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -296,21 +321,53 @@ export default function ChatPage() {
             try {
               const data = JSON.parse(line.slice(6));
               switch (data.type) {
+                case "pii_status":
+                  piiStatus = {
+                    hasPii: Boolean(data.hasPii),
+                    categories: Array.isArray(data.categories)
+                      ? data.categories.filter((value: unknown): value is string => typeof value === "string")
+                      : [],
+                    thread: typeof data.thread === "string" ? data.thread : "single",
+                    redactedText: typeof data.redactedText === "string" ? data.redactedText : undefined,
+                  };
+                  break;
+                case "metadata":
+                  sourcesUsed = Array.isArray(data.sourcesUsed)
+                    ? data.sourcesUsed.filter((value: unknown): value is string => typeof value === "string")
+                    : [];
+                  artifacts = Array.isArray(data.artifacts)
+                    ? data.artifacts.filter((artifact: unknown): artifact is Artifact => {
+                        if (!artifact || typeof artifact !== "object") return false;
+                        const value = artifact as Record<string, unknown>;
+                        return (
+                          typeof value.type === "string"
+                          && typeof value.label === "string"
+                          && typeof value.count === "number"
+                        );
+                      })
+                    : [];
+                  route = typeof data.route === "string" ? data.route : undefined;
+                  routeConfidence = typeof data.routeConfidence === "number" ? data.routeConfidence : undefined;
+                  routeReasoning = typeof data.routeReasoning === "string" ? data.routeReasoning : undefined;
+                  break;
                 case "progress":
                   if (data.step?.id && data.step?.toolName) {
+                    traceSteps = upsertToolTrace(traceSteps, data.step as ToolTraceStep);
                     setQueryProgress((previous) => upsertToolTrace(previous, data.step as ToolTraceStep));
+                    if (!rightTabManualRef.current) {
+                      setActiveRightTab("tooltrace");
+                    }
                   } else if (data.stage || data.message) {
-                    setQueryProgress((previous) => [
-                      ...previous,
-                      {
-                        id: `legacy-${previous.length + 1}`,
-                        toolName: data.stage || "Progress",
-                        status: "completed",
-                        durationMs: 0,
-                        inputSummary: "message inspection",
-                        outputSummary: data.message || "",
-                      },
-                    ]);
+                    const legacyStep: ToolTraceStep = {
+                      id: `legacy-${traceSteps.length + 1}`,
+                      toolName: data.stage || "Progress",
+                      status: "completed",
+                      durationMs: 0,
+                      inputSummary: "message inspection",
+                      outputSummary: data.message || "",
+                    };
+                    traceSteps = [...traceSteps, legacyStep];
+                    setQueryProgress((previous) => [...previous, legacyStep]);
                   }
                   break;
                 case "text":
@@ -319,6 +376,9 @@ export default function ChatPage() {
                   break;
                 case "citations":
                   nextCitations = data.citations;
+                  if (!rightTabManualRef.current) {
+                    setActiveRightTab("evidence");
+                  }
                   break;
                 case "done":
                   isVerified = data.isVerified;
@@ -342,6 +402,25 @@ export default function ChatPage() {
             const data = JSON.parse(line.slice(6));
             if (data.type === "done") isVerified = data.isVerified;
             if (data.type === "citations") nextCitations = data.citations;
+            if (data.type === "metadata") {
+              sourcesUsed = Array.isArray(data.sourcesUsed)
+                ? data.sourcesUsed.filter((value: unknown): value is string => typeof value === "string")
+                : [];
+              artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
+              route = typeof data.route === "string" ? data.route : undefined;
+              routeConfidence = typeof data.routeConfidence === "number" ? data.routeConfidence : undefined;
+              routeReasoning = typeof data.routeReasoning === "string" ? data.routeReasoning : undefined;
+            }
+            if (data.type === "pii_status") {
+              piiStatus = {
+                hasPii: Boolean(data.hasPii),
+                categories: Array.isArray(data.categories)
+                  ? data.categories.filter((value: unknown): value is string => typeof value === "string")
+                  : [],
+                thread: typeof data.thread === "string" ? data.thread : "single",
+                redactedText: typeof data.redactedText === "string" ? data.redactedText : undefined,
+              };
+            }
           } catch {
             // Ignore trailing parse issues from partial frames.
           }
@@ -355,6 +434,13 @@ export default function ChatPage() {
         createdAt: new Date(),
         citations: [],
         isVerified,
+        toolTrace: traceSteps,
+        sourcesUsed,
+        artifacts,
+        route,
+        routeConfidence,
+        routeReasoning,
+        piiStatus,
       };
 
       const { messageCitations, appendedCitations } = normalizeCitations(citations, nextCitations);
@@ -381,6 +467,7 @@ export default function ChatPage() {
           role: "assistant",
           content: "I hit an error while processing the request. Please try again.",
           createdAt: new Date(),
+          toolTrace: traceSteps,
         },
       ]);
     } finally {
@@ -465,6 +552,13 @@ export default function ChatPage() {
       ],
     };
   }, [messages]);
+
+  const latestAssistantTrace = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant" && (message.toolTrace?.length ?? 0) > 0)?.toolTrace ?? [],
+    [messages]
+  );
+
+  const rightRailToolTrace = isLoading && queryProgress.length > 0 ? queryProgress : latestAssistantTrace;
 
   const heroIntroMotion = !hasPlayedHeroEntry && !prefersReducedMotion;
   const heroCompactLead = marketView.supportPoints[0] || marketView.comment;
@@ -778,6 +872,9 @@ export default function ChatPage() {
         isCollapsed={sourcesPanelCollapsed}
         onToggle={() => setSourcesPanelCollapsed((previous) => !previous)}
         citations={citations}
+        toolTrace={rightRailToolTrace}
+        activeTab={activeRightTab}
+        onTabChange={handleRightTabChange}
         activeCitationId={activeCitationId}
         onCitationClick={handleCitationClick}
         mobileOpen={mobileEvidenceOpen}

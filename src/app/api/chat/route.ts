@@ -12,47 +12,8 @@ const RequestSchema = z.object({
   retrievalMode: z.enum(["code-rag", "foundry-iq"]).optional().default("code-rag"),
 });
 
-// Python backend URL - BACKEND_URL for Azure deployment, PYTHON_API_URL for local dev
 const PYTHON_API_URL = process.env.BACKEND_URL || process.env.PYTHON_API_URL || "http://localhost:5001";
-
-// Streaming text encoder
 const encoder = new TextEncoder();
-
-// Retry helper for transient backend failures
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 3
-): Promise<Response> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) return response;
-
-      // Don't retry on client errors (4xx)
-      if (response.status >= 400 && response.status < 500) {
-        return response;
-      }
-
-      // Retry on server errors (5xx)
-      if (attempt === maxRetries) return response;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt === maxRetries) throw lastError;
-
-      // Exponential backoff: 500ms, 1000ms, 1500ms
-      await new Promise(r => setTimeout(r, 500 * attempt));
-    }
-  }
-
-  throw lastError || new Error("Max retries exceeded");
-}
-
-function createSSEMessage(data: unknown): string {
-  return `data: ${JSON.stringify(data)}\n\n`;
-}
 
 type RetrievalMode = "code-rag" | "foundry-iq";
 
@@ -76,6 +37,34 @@ type BackendResponse = {
   route_confidence?: number;
   route_reasoning?: string;
 };
+
+function createSSEMessage(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2,
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok || (response.status >= 400 && response.status < 500)) {
+        return response;
+      }
+      if (attempt === maxRetries) return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt === maxRetries) throw lastError;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+
+  throw lastError || new Error("Max retries exceeded");
+}
 
 function mapRouteToRetrievalToolName(route: string, retrievalMode: RetrievalMode, sqlQuery?: string): string {
   if (retrievalMode === "foundry-iq" || route === "FOUNDRY_IQ") return "Foundry IQ";
@@ -109,15 +98,15 @@ function buildQueryAnalysisOutput(query: string, route: string): string {
   const normalized = query.toLowerCase();
   const signals: string[] = [];
 
-  if (/\b(compare|versus|vs)\b/i.test(query)) signals.push("soru_tipi(comparative)");
-  if (/\b(top|largest|biggest|highest|lowest|rank)\b/i.test(query)) signals.push("soru_tipi(ranking)");
-  if (/\b(aum|assets|duration|yield|holdings|exposure|returns?)\b/i.test(query)) signals.push("veri_ihtiyacı(structured)");
-  if (normalized.includes("bond")) signals.push("kategori(Borçlanma Araçları Fonları)");
+  if (/\b(compare|versus|vs)\b/i.test(query)) signals.push("question_type(comparative)");
+  if (/\b(top|largest|biggest|highest|lowest|rank)\b/i.test(query)) signals.push("question_type(ranking)");
+  if (/\b(aum|assets|duration|yield|holdings|exposure|returns?)\b/i.test(query)) signals.push("data_need(structured)");
+  if (normalized.includes("bond")) signals.push("category(bond funds)");
   if (normalized.includes("equity") || normalized.includes("stock") || normalized.includes("nvidia")) {
-    signals.push("kategori(Hisse Senedi Fonları)");
+    signals.push("category(equity funds)");
   }
   if (normalized.includes("inflation") || normalized.includes("macro") || normalized.includes("imf") || normalized.includes("rate")) {
-    signals.push("piyasa_terimi");
+    signals.push("market_term");
   }
 
   if (signals.length === 0) {
@@ -127,12 +116,27 @@ function buildQueryAnalysisOutput(query: string, route: string): string {
   return signals.join(" | ");
 }
 
+function mapCitationDataset(sourceType: string): string {
+  switch (sourceType) {
+    case "SQL":
+      return "nport_funds.db";
+    case "SEMANTIC":
+      return "nport-funds-index";
+    case "RAPTOR":
+      return "imf_raptor";
+    case "foundry_iq":
+      return "foundry_iq";
+    default:
+      return sourceType || "unknown";
+  }
+}
+
 function normalizeTraceSteps(
   steps: ToolTraceStep[] | undefined,
   query: string,
   retrievalMode: RetrievalMode,
   data: BackendResponse,
-  messageCount: number
+  messageCount: number,
 ): ToolTraceStep[] {
   if (Array.isArray(steps) && steps.length > 0) {
     return steps.map((step) => ({
@@ -234,25 +238,23 @@ function normalizeTraceSteps(
   ];
 }
 
-// Helper to stream backend JSON result to client via SSE (word-by-word for typing effect)
+function parseLegacyPiiStatus(data: BackendResponse) {
+  return {
+    type: "pii_status" as const,
+    hasPii: Boolean(data.pii_blocked),
+    categories: [] as string[],
+    thread: data.pii_blocked ? "blocked" : "single",
+  };
+}
+
 async function streamResultToClient(
-  controller: ReadableStreamDefaultController,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   data: BackendResponse,
   query: string,
   retrievalMode: RetrievalMode,
-  messageCount: number
+  messageCount: number,
 ) {
-  // Check if PII was blocked
-  if (data.pii_blocked) {
-    controller.enqueue(
-      encoder.encode(
-        createSSEMessage({
-          type: "pii_blocked",
-          message: data.pii_warning || data.answer,
-        })
-      )
-    );
-  }
+  controller.enqueue(encoder.encode(createSSEMessage(parseLegacyPiiStatus(data))));
 
   const sourcesUsed = Array.isArray(data.citations)
     ? [...new Set(data.citations.map((citation) => citation.source_type))]
@@ -262,18 +264,16 @@ async function streamResultToClient(
     encoder.encode(
       createSSEMessage({
         type: "metadata",
-        intent: "GENERAL",
+        intent: data.pii_blocked ? "PII_BLOCKED" : "GENERAL",
         sourcesUsed,
-        artifacts: data.sql_query
-          ? [{ type: "sql_query", label: "SQL query", count: 1 }]
-          : [],
+        artifacts: data.sql_query ? [{ type: "sql_query", label: "SQL query", count: 1 }] : [],
         routeConfidence: data.route_confidence ?? null,
         routeReasoning: data.route_reasoning ?? data.reasoning ?? null,
         route: data.route,
         reasoning: data.reasoning,
         sql_query: data.sql_query,
-      })
-    )
+      }),
+    ),
   );
 
   const hasBackendTrace = Array.isArray(data.tool_trace) && data.tool_trace.length > 0;
@@ -285,74 +285,75 @@ async function streamResultToClient(
           createSSEMessage({
             type: "progress",
             step: { ...step, status: "running" },
-          })
-        )
+          }),
+        ),
       );
     }
 
-    controller.enqueue(
-      encoder.encode(
-        createSSEMessage({
-          type: "progress",
-          step,
-        })
-      )
-    );
+    controller.enqueue(encoder.encode(createSSEMessage({ type: "progress", step })));
   }
 
-  // Stream the response word by word
-  const responseText = data.answer;
-  const words = responseText.split(" ");
-
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i] + (i < words.length - 1 ? " " : "");
+  for (const [index, word] of data.answer.split(" ").entries()) {
     controller.enqueue(
       encoder.encode(
         createSSEMessage({
           type: "text",
-          content: word,
-        })
-      )
+          content: word + (index < data.answer.split(" ").length - 1 ? " " : ""),
+        }),
+      ),
     );
-    // Small delay for streaming effect
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  // Send citations if any
   if (data.citations && data.citations.length > 0) {
-    const formattedCitations: Citation[] = data.citations.map(
-      (c, idx) => ({
-        id: idx + 1,
-        provider: c.source_type,
-        dataset: c.source_type === "SQL" ? "nport_funds.db" :
-                 c.source_type === "SEMANTIC" ? "nport-funds-index" : "imf_raptor",
-        rowId: c.identifier,
-        timestamp: new Date().toISOString(),
-        confidence: c.score || 0.9,
-        excerpt: c.content_preview,
-      })
-    );
+    const formattedCitations: Citation[] = data.citations.map((citation, idx) => ({
+      id: idx + 1,
+      provider: citation.source_type,
+      dataset: mapCitationDataset(citation.source_type),
+      rowId: citation.identifier,
+      timestamp: new Date().toISOString(),
+      confidence: citation.score || 0.9,
+      excerpt: citation.content_preview,
+    }));
 
     controller.enqueue(
       encoder.encode(
         createSSEMessage({
           type: "citations",
           citations: formattedCitations,
-        })
-      )
+        }),
+      ),
     );
   }
 
-  // Send completion signal
-  const isVerified = data.route === "FOUNDRY_IQ" || (data.citations && data.citations.length > 0);
   controller.enqueue(
     encoder.encode(
       createSSEMessage({
         type: "done",
-        isVerified,
-      })
-    )
+        isVerified: data.route === "FOUNDRY_IQ" || Boolean(data.citations?.length),
+      }),
+    ),
   );
+}
+
+async function pipeBackendStream(
+  response: Response,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Streaming backend returned no body");
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) controller.enqueue(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -363,44 +364,63 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Invalid request", details: parsed.error.issues }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const { messages, retrievalMode } = parsed.data;
-    const lastUserMessage = messages.filter((m) => m.role === "user").pop();
+    const lastUserMessage = messages.filter((message) => message.role === "user").pop();
 
     if (!lastUserMessage) {
       return new Response(
         JSON.stringify({ error: "No user message found" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const query = lastUserMessage.content;
 
-    // Create a streaming response
-    const stream = new ReadableStream({
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          // Call Python backend
           controller.enqueue(
             encoder.encode(
               createSSEMessage({
                 type: "tool_call",
                 name: "fund_rag_query",
                 arguments: { query },
-              })
-            )
+              }),
+            ),
           );
 
-          // Call the Python API with retry logic for transient failures
+          try {
+            const streamingResponse = await fetchWithRetry(`${PYTHON_API_URL}/api/chat/stream`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message: query,
+                messages,
+                use_llm_routing: true,
+                retrieval_mode: retrievalMode,
+              }),
+            });
+
+            if (streamingResponse.ok && streamingResponse.body) {
+              await pipeBackendStream(streamingResponse, controller);
+              controller.close();
+              return;
+            }
+          } catch (streamError) {
+            console.warn("Falling back to legacy chat endpoint after stream failure", streamError);
+          }
+
           const response = await fetchWithRetry(`${PYTHON_API_URL}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: query,
-              use_llm_routing: true,  // Use LLM routing for accurate path detection
+              messages,
+              use_llm_routing: true,
               retrieval_mode: retrievalMode,
             }),
           });
@@ -409,17 +429,13 @@ export async function POST(request: NextRequest) {
             throw new Error(`Python API error: ${response.status}`);
           }
 
-          // Backend always returns JSON - stream it to client via SSE
-          const data = await response.json();
+          const data = (await response.json()) as BackendResponse;
           await streamResultToClient(controller, data, query, retrievalMode, messages.length);
           controller.close();
         } catch (error) {
           console.error("Streaming error:", error);
-
-          // Check if it's a connection error to Python backend
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          const isConnectionError = errorMessage.includes("ECONNREFUSED") ||
-                                    errorMessage.includes("fetch failed");
+          const isConnectionError = errorMessage.includes("ECONNREFUSED") || errorMessage.includes("fetch failed");
 
           controller.enqueue(
             encoder.encode(
@@ -428,8 +444,8 @@ export async function POST(request: NextRequest) {
                 message: isConnectionError
                   ? "Backend server not running. Please start the Python API server (python api_server.py)"
                   : `Error: ${errorMessage}`,
-              })
-            )
+              }),
+            ),
           );
           controller.close();
         }
@@ -447,7 +463,7 @@ export async function POST(request: NextRequest) {
     console.error("Chat API error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }

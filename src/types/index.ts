@@ -24,6 +24,13 @@ export interface Message {
   citations?: Citation[];
   isVerified?: boolean;
   toolCalls?: ToolCall[];
+  toolTrace?: ToolTraceStep[];
+  sourcesUsed?: string[];
+  artifacts?: Artifact[];
+  route?: string;
+  routeConfidence?: number;
+  routeReasoning?: string;
+  piiStatus?: PiiStatus;
 }
 
 export interface Citation {
@@ -51,6 +58,19 @@ export interface ToolTraceStep {
   inputSummary: string;
   outputSummary: string;
   tokensUsed?: number;
+}
+
+export interface Artifact {
+  type: string;
+  label: string;
+  count: number;
+}
+
+export interface PiiStatus {
+  hasPii: boolean;
+  categories: string[];
+  thread: string;
+  redactedText?: string;
 }
 
 export interface Conversation {
