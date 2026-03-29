@@ -484,11 +484,11 @@ export default function ChatPage() {
           className="chat-hero-shell border-b border-border/70 px-3 py-3 md:px-5"
         >
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
-            <AnimatePresence initial={false} mode="wait">
+            <AnimatePresence initial={false} mode="sync">
               {heroMode === "expanded" ? (
                 <motion.div
                   key="hero-expanded"
-                  initial={heroIntroMotion ? { opacity: 0, y: 16, scale: 0.992 } : { opacity: 0, y: 10, scale: 0.99 }}
+                  initial={heroIntroMotion ? { opacity: 0, y: 16, scale: 0.992 } : false}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -8, scale: 0.988 }}
                   transition={HERO_TRANSITION}
@@ -638,7 +638,7 @@ export default function ChatPage() {
               ) : (
                 <motion.div
                   key="hero-compact"
-                  initial={{ opacity: 0, y: -8, scale: 0.99 }}
+                  initial={heroIntroMotion ? { opacity: 0, y: -8, scale: 0.99 } : false}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.99 }}
                   transition={HERO_TRANSITION}
