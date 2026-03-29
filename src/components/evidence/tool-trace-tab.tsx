@@ -33,7 +33,7 @@ export function ToolTraceTab({ steps }: ToolTraceTabProps) {
       <div className="flex items-center justify-between border-t border-border/70 pt-2 text-[10px] text-muted-foreground">
         <span>{steps.length} steps</span>
         <span>{steps.reduce((total, step) => total + step.durationMs, 0)} ms total</span>
-        <span>{steps.reduce((total, step) => total + (step.tokensUsed || 0), 0)} tok</span>
+        <span>{steps.reduce((total, step) => total + (step.tokensUsed || 0), 0)} tokens</span>
       </div>
     </div>
   );

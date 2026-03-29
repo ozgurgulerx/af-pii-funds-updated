@@ -121,7 +121,7 @@ export function ToolTraceItem({ step }: ToolTraceItemProps) {
           </span>
           {step.tokensUsed !== undefined && (
             <span className="ml-auto text-[10px] text-muted-foreground">
-              {step.tokensUsed} tok
+              {step.tokensUsed} tokens
             </span>
           )}
         </div>
