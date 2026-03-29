@@ -468,6 +468,7 @@ export default function ChatPage() {
 
   const heroIntroMotion = !hasPlayedHeroEntry && !prefersReducedMotion;
   const heroCompactLead = marketView.supportPoints[0] || marketView.comment;
+  const workspaceIntroTransition = { duration: 0.4, delay: heroIntroMotion ? 0.1 : 0, ease: [0.22, 1, 0.36, 1] } as const;
 
   const heroMobileActions = (
     <div className="flex items-center gap-2 lg:hidden">
@@ -719,51 +720,58 @@ export default function ChatPage() {
           </div>
         </motion.div>
 
-        <ChatThread
-          messages={messages}
-          isLoading={isLoading}
-          streamingContent={streamingContent}
-          queryProgress={queryProgress}
-          onCitationClick={handleCitationClick}
-          activeCitationId={activeCitationId}
-          onSendMessage={handleSendMessage}
-        />
+        <motion.div
+          initial={heroIntroMotion ? { opacity: 0, x: 30 } : false}
+          animate={{ opacity: 1, x: 0 }}
+          transition={workspaceIntroTransition}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <ChatThread
+            messages={messages}
+            isLoading={isLoading}
+            streamingContent={streamingContent}
+            queryProgress={queryProgress}
+            onCitationClick={handleCitationClick}
+            activeCitationId={activeCitationId}
+            onSendMessage={handleSendMessage}
+          />
 
-        <FollowUpChips
-          suggestions={ENHANCED_FOLLOW_UP_SUGGESTIONS}
-          onSelect={handleSendMessage}
-          isVisible={showFollowUps && !isLoading && messages.length > 0}
-        />
+          <FollowUpChips
+            suggestions={ENHANCED_FOLLOW_UP_SUGGESTIONS}
+            onSelect={handleSendMessage}
+            isVisible={showFollowUps && !isLoading && messages.length > 0}
+          />
 
-        <div className="px-3 pb-3 md:px-5">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
-            <div className="rounded-[22px] border border-border/70 bg-background/76 px-4 py-3 shadow-subtle">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Retrieval mode
+          <div className="px-3 pb-3 md:px-5">
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
+              <div className="rounded-[22px] border border-border/70 bg-background/76 px-4 py-3 shadow-subtle">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Retrieval mode
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Switch between `Code-based RAG` and `Foundry IQ` without changing the hero summary state.
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Switch between `Code-based RAG` and `Foundry IQ` without changing the hero summary state.
-                  </p>
-                </div>
 
-                <ToggleGroup
-                  value={retrievalMode}
-                  onValueChange={(value) => setRetrievalMode(value as RetrievalMode)}
-                  options={[
-                    { value: "code-rag", label: "Code-based RAG" },
-                    { value: "foundry-iq", label: "Foundry IQ" },
-                  ]}
-                />
+                  <ToggleGroup
+                    value={retrievalMode}
+                    onValueChange={(value) => setRetrievalMode(value as RetrievalMode)}
+                    options={[
+                      { value: "code-rag", label: "Code-based RAG" },
+                      { value: "foundry-iq", label: "Foundry IQ" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-border/80 bg-card/88 px-3 py-3 shadow-panel backdrop-blur-sm md:px-4">
+                <MessageComposer onSubmit={handleSendMessage} isLoading={isLoading} />
               </div>
             </div>
-
-            <div className="rounded-[28px] border border-border/80 bg-card/88 px-3 py-3 shadow-panel backdrop-blur-sm md:px-4">
-              <MessageComposer onSubmit={handleSendMessage} isLoading={isLoading} />
-            </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       <SourcesPanel

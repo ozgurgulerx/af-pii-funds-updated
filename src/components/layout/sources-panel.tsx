@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -165,11 +165,18 @@ export function SourcesPanel({
   onMobileClose,
   ...props
 }: SourcesPanelProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <>
-      <aside className="hidden h-full w-[332px] shrink-0 border-l border-border/70 panel-glass lg:block">
+      <motion.aside
+        initial={prefersReducedMotion ? false : { x: 28, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.38, delay: prefersReducedMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}
+        className="hidden h-full w-[332px] shrink-0 border-l border-border/70 panel-glass lg:block"
+      >
         <SourcesPanelBody {...props} />
-      </aside>
+      </motion.aside>
 
       <AnimatePresence>
         {mobileOpen && (
