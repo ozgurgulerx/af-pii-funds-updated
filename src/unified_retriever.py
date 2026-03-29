@@ -211,7 +211,7 @@ class UnifiedRetriever:
             return 0.86 if route_reasoning else 0.82
         return 0.72
 
-    def _build_query_analysis_output(self, query: str, route: str) -> str:
+    def _build_query_analysis_output(self, query: str, route: Optional[str] = None) -> str:
         normalized = query.lower()
         signals: List[str] = []
 
@@ -796,7 +796,18 @@ Return specific fund selection criteria in 2-3 sentences."""
         analysis_input = f"query: {display_query}"
         emitter.start("query-analysis", "Query Analysis", analysis_input)
         analysis_started = time.perf_counter()
+        analysis_output = self._build_query_analysis_output(display_query, forced_route)
+        emitter.complete(
+            "query-analysis",
+            "Query Analysis",
+            int((time.perf_counter() - analysis_started) * 1000),
+            analysis_output,
+            analysis_input,
+        )
 
+        router_input = f"query: {display_query}"
+        emitter.start("intent-router-v2", "Intent Router V2", router_input)
+        router_started = time.perf_counter()
         if forced_route:
             route_result: Dict[str, Any] = {
                 "route": forced_route,
@@ -817,18 +828,6 @@ Return specific fund selection criteria in 2-3 sentences."""
         route = route_result.get("route", "HYBRID")
         sql_hint = route_result.get("sql_hint", sql_hint)
         raptor_topics = route_result.get("raptor_topics", raptor_topics or [])
-        analysis_output = self._build_query_analysis_output(display_query, route)
-        emitter.complete(
-            "query-analysis",
-            "Query Analysis",
-            int((time.perf_counter() - analysis_started) * 1000),
-            analysis_output,
-            analysis_input,
-        )
-
-        router_input = "message inspection"
-        emitter.start("intent-router-v2", "Intent Router V2", router_input)
-        router_started = time.perf_counter()
         route_confidence = self._trace_route_confidence(
             use_llm_routing=use_llm_routing,
             forced_route=forced_route,
