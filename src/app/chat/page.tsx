@@ -485,13 +485,13 @@ export default function ChatPage() {
       return {
         focusProfile: "balanced" as const,
         eyebrow: "Market status",
-        headline: "Rate expectations are still doing most of the work right now.",
+        headline: "Iran-linked energy stress is now steering the rates trade.",
         comment:
-          "That keeps bond funds in focus, with duration, credit quality, and carry deciding which products can actually hold up as the tape shifts.",
+          "Late-March markets are repricing bond funds through higher oil, shipping disruption, and a less certain cut path, so duration discipline and credit quality matter more than headline carry.",
         supportPoints: [
-          "Duration remains the cleanest way to express the easing-rate view.",
-          "Credit quality matters more than headline yield once positioning gets crowded.",
-          "Use the profile cards to separate core exposure from purely defensive posture.",
+          "Cleaner duration exposure works better than stretched yield while inflation risk is being repriced.",
+          "Liquidity and credit quality matter more when energy shock volatility leaks into fixed income.",
+          "Use the profile cards to separate core ballast from a more defensive short-duration stance.",
         ],
       };
     }
@@ -500,13 +500,13 @@ export default function ChatPage() {
       return {
         focusProfile: "momentum" as const,
         eyebrow: "Market status",
-        headline: "Equity leadership still looks concentrated rather than broad.",
+        headline: "The equity tape is still narrow, but macro shock is back in control.",
         comment:
-          "AI-heavy exposures continue to pull attention, so fund selection is less about headline performance and more about what is actually inside the portfolio.",
+          "AI-heavy leadership still matters, but the Iran-driven oil and shipping shock has made concentration risk more expensive, so fund selection has to balance leadership exposure with balance-sheet resilience.",
         supportPoints: [
-          "Momentum works best when you understand how concentrated the winners really are.",
-          "Look for whether the fund owns the same leadership names or a wider second line.",
-          "The card grid is meant to separate participation, protection, and higher-beta expressions.",
+          "Momentum works best when the fund is explicit about how much mega-cap concentration it carries.",
+          "Broader quality exposure matters more if higher energy costs start to pressure margins and breadth.",
+          "Use the cards to separate pure participation from more defensive or higher-beta expressions.",
         ],
       };
     }
@@ -515,13 +515,13 @@ export default function ChatPage() {
       return {
         focusProfile: "defensive" as const,
         eyebrow: "Market status",
-        headline: "Macro expectations are steering allocation calls more than single-name noise.",
+        headline: "Oil, shipping, and rate-cut repricing are directing fund selection right now.",
         comment:
-          "Inflation, rate-cut timing, and global growth assumptions are still the first filter, which is why flexible and more defensive fund buckets stay relevant.",
+          "As of late March 2026, the dominant macro signal is Iran-linked supply disruption feeding back into inflation and growth expectations, which keeps defensive and flexible fund buckets relevant.",
         supportPoints: [
-          "Macro uncertainty still argues for cleaner downside control than aggressive chasing.",
-          "Defensive funds become more useful when the growth path is uneven rather than broken.",
-          "Compare the cards by how much risk each profile asks you to carry into the same backdrop.",
+          "Macro uncertainty still argues for downside control before aggressive chasing.",
+          "Funds with cleaner liquidity, shorter duration, or stronger balance-sheet quality have a clearer role here.",
+          "Compare the cards by how much oil, rate, and concentration risk each profile asks you to absorb.",
         ],
       };
     }
@@ -529,13 +529,13 @@ export default function ChatPage() {
     return {
       focusProfile: "balanced" as const,
       eyebrow: "Market status",
-      headline: "The backdrop is still mixed enough to reward structure over momentum.",
+      headline: "Macro instability is back in the driver’s seat, led by Iran-linked energy risk.",
       comment:
-        "Investors are still weighing easing-rate optimism against concentration risk, which makes it useful to compare fund type, mandate, and downside behavior before chasing winners.",
+        "The current backdrop is being shaped less by a clean soft-landing story and more by oil, shipping, and inflation uncertainty, so fund selection should start with resilience before upside.",
       supportPoints: [
-        "Balanced exposure remains the default until breadth improves decisively.",
-        "The card stack gives you a fast read on where to lean without leaving the chat workflow.",
-        "Use the evidence rail after each query to verify why a suggested profile actually fits.",
+        "Balanced exposure remains the default while the oil shock keeps the rate path less predictable.",
+        "Use the card stack to separate ballast, selective growth, and higher-beta risk without leaving the chat workflow.",
+        "Check the evidence rail after each query to confirm why a suggested profile fits this macro tape.",
       ],
     };
   }, [messages]);
