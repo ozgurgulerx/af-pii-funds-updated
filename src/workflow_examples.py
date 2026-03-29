@@ -4,9 +4,6 @@ Example workflows using the Foundry IQ Agent.
 Shows different integration patterns for your applications.
 """
 
-import sys
-sys.path.insert(0, '/Users/ozgurguler/Developer/Projects/af-pii-funds/fund-rag-poc/src')
-
 from fund_rag_agent import FundRAGAgent
 
 

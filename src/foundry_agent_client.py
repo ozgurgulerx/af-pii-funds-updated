@@ -9,10 +9,10 @@ which provides access to the agent's configured knowledge base and instructions.
 
 import os
 import requests
-from dotenv import load_dotenv
 from azure.identity import DefaultAzureCredential
+from runtime_config import load_local_env
 
-load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
+load_local_env()
 
 
 class FoundryAgentClient:

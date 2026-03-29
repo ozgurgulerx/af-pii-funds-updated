@@ -8,19 +8,17 @@ import os
 import sqlite3
 import re
 from pathlib import Path
-from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 from pii_filter import PiiFilter
+from runtime_config import default_sqlite_path, load_local_env
 
-# Load environment variables
-load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
+load_local_env()
 
-# Paths
-DB_PATH = Path("/Users/ozgurguler/Developer/Projects/af-pii-funds/fund-rag-poc/nport_funds.db")
+DB_PATH = Path(os.getenv("SQLITE_PATH", str(default_sqlite_path())))
 
 # Azure OpenAI configuration
 OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")

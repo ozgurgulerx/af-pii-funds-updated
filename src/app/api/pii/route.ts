@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log("═".repeat(70));
     console.log(`📡 Service: ${serviceInfo.type}`);
     console.log(`🌐 Endpoint: ${serviceInfo.endpoint}`);
-    console.log(`💬 Message: "${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}"`);
+    console.log(`💬 Message length: ${userMessage.length} characters`);
     console.log("─".repeat(70));
 
     const result = await checkPii({ text: userMessage });
@@ -48,14 +48,12 @@ export async function POST(request: NextRequest) {
     if (result.hasPii) {
       const warningMessage = formatPiiWarning(result.entities);
       const categories = result.entities.map((e) => e.category);
+      const entityCount = result.entities.length;
 
       // Log blocked result
       console.log("⛔ RESULT: BLOCKED");
       console.log(`🚨 Detected PII Categories: ${categories.join(", ")}`);
-      console.log(`📋 Entities Found:`);
-      result.entities.forEach((entity) => {
-        console.log(`   • "${entity.text}" → ${entity.category} (${(entity.confidenceScore * 100).toFixed(0)}% confidence)`);
-      });
+      console.log(`📋 Entities Found: ${entityCount}`);
       console.log(`💬 User Warning: "${warningMessage}"`);
       console.log("═".repeat(70) + "\n");
 
@@ -68,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     // Log allowed result
     console.log("✅ RESULT: ALLOWED");
-    console.log("📝 No banking-relevant PII detected in message");
+    console.log(`📝 No banking-relevant PII detected in message (${userMessage.length} characters)`);
     console.log("➡️  Message will be forwarded to AI agent");
     console.log("═".repeat(70) + "\n");
 

@@ -87,7 +87,7 @@ export function Message({
                   <CheckCircle2 className="h-3 w-3" />
                   {message.citations.length} cited
                 </Badge>
-                {message.citations.map((citation) => (
+                {message.citations.map((citation, index) => (
                   <button
                     key={citation.id}
                     type="button"
@@ -97,7 +97,7 @@ export function Message({
                       activeCitationId === citation.id && "active"
                     )}
                   >
-                    {citation.id}
+                    {index + 1}
                   </button>
                 ))}
               </>
@@ -124,6 +124,7 @@ export function Message({
 
 function MarkdownContent({
   content,
+  citations,
   onCitationClick,
   activeCitationId,
 }: {
@@ -138,7 +139,8 @@ function MarkdownContent({
       const match = part.match(/\[(\d+)\]/);
       if (!match) return part;
 
-      const citationId = Number.parseInt(match[1], 10);
+      const citationIndex = Number.parseInt(match[1], 10);
+      const citationId = citations?.[citationIndex - 1]?.id ?? citationIndex;
       return (
         <button
           key={`${part}-${index}`}
@@ -149,7 +151,7 @@ function MarkdownContent({
             activeCitationId === citationId && "active"
           )}
         >
-          {citationId}
+          {citationIndex}
         </button>
       );
     });

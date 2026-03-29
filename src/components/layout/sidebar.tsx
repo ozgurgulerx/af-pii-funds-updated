@@ -21,6 +21,7 @@ import { SAMPLE_CONVERSATIONS } from "@/data/seed";
 
 interface SidebarProps {
   isCollapsed: boolean;
+  isLoading?: boolean;
   onToggle: () => void;
   onSelectConversation: (id: string) => void;
   activeConversationId?: string;
@@ -33,6 +34,7 @@ interface SidebarProps {
 
 function SidebarBody({
   isCollapsed,
+  isLoading = false,
   onToggle,
   onSelectConversation,
   activeConversationId,
@@ -78,7 +80,7 @@ function SidebarBody({
         </div>
 
         <div className={cn("mt-3 space-y-3", showCollapsed && "hidden")}>
-          <Button onClick={onNewChat} className="w-full justify-start gap-2">
+          <Button onClick={onNewChat} className="w-full justify-start gap-2" disabled={isLoading}>
             <MessageSquarePlus className="h-4 w-4" />
             <span>New secured chat</span>
           </Button>
@@ -88,6 +90,7 @@ function SidebarBody({
             <Input
               placeholder="Search saved sessions"
               value={searchQuery}
+              disabled={isLoading}
               onChange={(event) => setSearchQuery(event.target.value)}
               className="h-10 rounded-2xl border-border/80 bg-background/80 pl-9"
             />
@@ -110,16 +113,18 @@ function SidebarBody({
 
       <ScrollArea className="flex-1" viewportClassName="px-3 py-3">
         {showCollapsed ? (
-          <div className="space-y-2">
-            <Button onClick={onNewChat} size="icon-sm" className="w-full">
+            <div className="space-y-2">
+            <Button onClick={onNewChat} size="icon-sm" className="w-full" disabled={isLoading}>
               <MessageSquarePlus className="h-4 w-4" />
             </Button>
             {filteredConversations.map((conversation) => (
               <button
                 key={conversation.id}
+                disabled={isLoading}
                 onClick={() => onSelectConversation(conversation.id)}
                 className={cn(
                   "flex h-10 w-full items-center justify-center rounded-2xl border transition-colors",
+                  isLoading && "cursor-not-allowed opacity-60",
                   conversation.id === activeConversationId
                     ? "border-primary/30 bg-primary/10 text-primary"
                     : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-background/70 hover:text-foreground"
@@ -142,12 +147,14 @@ function SidebarBody({
                   return (
                     <button
                       key={conversation.id}
+                      disabled={isLoading}
                       onClick={() => {
                         onSelectConversation(conversation.id);
                         onMobileClose?.();
                       }}
                       className={cn(
                         "w-full rounded-[22px] border px-3 py-3 text-left transition-all",
+                        isLoading && "cursor-not-allowed opacity-60 hover:border-border/70 hover:bg-background/75",
                         conversation.id === activeConversationId
                           ? "border-primary/30 bg-primary/[0.06] shadow-subtle"
                           : "border-border/70 bg-background/75 hover:border-primary/20 hover:bg-primary/[0.03]"
@@ -179,11 +186,15 @@ function SidebarBody({
                     <button
                       key={prompt}
                       type="button"
+                      disabled={isLoading}
                       onClick={() => {
                         onQuickPromptSelect(prompt);
                         onMobileClose?.();
                       }}
-                      className="w-full rounded-2xl border border-border/70 bg-background/75 px-3 py-2 text-left text-[13px] text-foreground/85 transition-colors hover:border-primary/25 hover:bg-primary/[0.05]"
+                      className={cn(
+                        "w-full rounded-2xl border border-border/70 bg-background/75 px-3 py-2 text-left text-[13px] text-foreground/85 transition-colors hover:border-primary/25 hover:bg-primary/[0.05]",
+                        isLoading && "cursor-not-allowed opacity-60 hover:border-border/70 hover:bg-background/75"
+                      )}
                     >
                       {prompt}
                     </button>

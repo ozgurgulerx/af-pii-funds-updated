@@ -6,11 +6,11 @@ Generates SQLite-compatible SQL from natural language queries.
 
 import os
 import re
-from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from runtime_config import load_local_env
 
-load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
+load_local_env()
 
 # Full schema documentation for LLM
 FULL_SCHEMA = """

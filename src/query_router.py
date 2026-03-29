@@ -6,11 +6,11 @@ Routes: SQL, SEMANTIC, RAPTOR, SEMANTIC_RAPTOR, HYBRID, CHAIN
 
 import os
 import json
-from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from runtime_config import load_local_env
 
-load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
+load_local_env()
 
 ROUTING_PROMPT = """You are a query router for a mutual fund Q&A system with multiple data sources.
 

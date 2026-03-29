@@ -9,9 +9,9 @@ import os
 import requests
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
-from dotenv import load_dotenv
+from runtime_config import load_local_env
 
-load_dotenv("/Users/ozgurguler/Developer/Projects/af-pii-funds/.env")
+load_local_env()
 
 # PII Container endpoint (same as frontend uses)
 PII_ENDPOINT = os.getenv("PII_ENDPOINT", os.getenv("PII_CONTAINER_ENDPOINT", "http://localhost:5000"))
