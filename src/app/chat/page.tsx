@@ -3,12 +3,15 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   FileSearch,
+  Globe2,
   LayoutPanelLeft,
+  Landmark,
   Layers,
   Menu,
   MessageSquareText,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SourcesPanel } from "@/components/layout/sources-panel";
@@ -26,6 +29,33 @@ import {
 import type { Citation, Message } from "@/types";
 
 type RetrievalMode = "code-rag" | "foundry-iq";
+
+const HERO_FUND_TYPES = [
+  {
+    id: "bond",
+    label: "Bond Funds",
+    detail: "Duration, credit quality, and carry stay in the foreground.",
+    icon: Landmark,
+  },
+  {
+    id: "equity",
+    label: "Equity Funds",
+    detail: "Holdings concentration and sector exposure matter more than headlines.",
+    icon: TrendingUp,
+  },
+  {
+    id: "macro",
+    label: "Macro-linked",
+    detail: "Rate cuts, inflation, and growth assumptions are still setting the tone.",
+    icon: Globe2,
+  },
+  {
+    id: "income",
+    label: "Defensive Income",
+    detail: "Liquidity and downside control remain part of the screen.",
+    icon: ShieldCheck,
+  },
+] as const;
 
 export default function ChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -224,6 +254,51 @@ export default function ChatPage() {
     []
   );
 
+  const marketView = useMemo(() => {
+    const context = messages
+      .slice(-4)
+      .map((message) => message.content.toLowerCase())
+      .join(" ");
+
+    if (context.includes("bond") || context.includes("duration") || context.includes("rate")) {
+      return {
+        activeType: "bond",
+        eyebrow: "Market status",
+        headline: "Rate expectations are still doing most of the work right now.",
+        comment:
+          "That keeps bond funds in focus, with duration, credit quality, and carry deciding which products can actually hold up as the tape shifts.",
+      };
+    }
+
+    if (context.includes("nvidia") || context.includes("equity") || context.includes("growth") || context.includes("ai")) {
+      return {
+        activeType: "equity",
+        eyebrow: "Market status",
+        headline: "Equity leadership still looks concentrated rather than broad.",
+        comment:
+          "AI-heavy exposures continue to pull attention, so fund selection is less about headline performance and more about what is actually inside the portfolio.",
+      };
+    }
+
+    if (context.includes("imf") || context.includes("inflation") || context.includes("macro") || context.includes("growth")) {
+      return {
+        activeType: "macro",
+        eyebrow: "Market status",
+        headline: "Macro expectations are steering allocation calls more than single-name noise.",
+        comment:
+          "Inflation, rate-cut timing, and global growth assumptions are still the first filter, which is why flexible and macro-linked fund buckets are staying relevant.",
+      };
+    }
+
+    return {
+      activeType: "income",
+      eyebrow: "Market status",
+      headline: "The backdrop is still mixed enough to reward structure over momentum.",
+      comment:
+        "Investors are still weighing easing-rate optimism against concentration risk, which makes it useful to compare fund type, mandate, and downside behavior before chasing winners.",
+    };
+  }, [messages]);
+
   const metricCards = useMemo(
     () => [
       {
@@ -305,67 +380,80 @@ export default function ChatPage() {
                     <div className="mt-4 space-y-2">
                       <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/75">
                         <Sparkles className="h-3.5 w-3.5" />
-                        Research workspace
+                        {marketView.eyebrow}
                       </div>
                       <h2 className="max-w-2xl text-[22px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[25px]">
-                        Fund research, protected by the existing PII gate and anchored to evidence.
+                        {marketView.headline}
                       </h2>
                       <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                        Keep the same backend flow, switch retrieval modes when needed, and review citations in the rail without leaving the conversation.
+                        {marketView.comment}
                       </p>
                     </div>
 
                     <div className="mt-4 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
-                      Start from the overview here, then move straight into the conversation and source rails below.
+                      Scan the fund types on the right, then move into the conversation and source rails below.
                     </div>
                   </div>
 
                   <div className="rounded-[24px] border border-border/60 bg-card/76 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                    <div className="flex h-full flex-col gap-4">
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                          Retrieval mode
-                        </div>
-                        <ToggleGroup
-                          value={retrievalMode}
-                          onValueChange={(value) => setRetrievalMode(value as RetrievalMode)}
-                          options={[
-                            { value: "code-rag", label: "Code-based RAG" },
-                            { value: "foundry-iq", label: "Foundry IQ" },
-                          ]}
-                        />
+                    <div className="flex h-full flex-col gap-3">
+                      <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        Fund types in focus
                       </div>
 
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            Workspace state
-                          </div>
-                          <div className="mt-1 font-display text-lg font-semibold text-foreground">
-                            {activeConversationId ? "Session loaded" : "Ready to brief"}
-                          </div>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {messages.length > 0 ? "Conversation context is preserved in the center pane." : "Open with a prompt or start a fresh request."}
-                          </p>
-                        </div>
-
-                        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            Evidence rail
-                          </div>
-                          <div className="mt-1 font-display text-lg font-semibold text-foreground">
-                            {citations.length > 0 ? `${citations.length} citations ready` : "Waiting for sources"}
-                          </div>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {activeCitationId ? `Citation #${activeCitationId} is in focus on the right rail.` : "Source cards appear here as answers stream in."}
-                          </p>
-                        </div>
+                        {HERO_FUND_TYPES.map((fundType) => {
+                          const Icon = fundType.icon;
+                          const isActive = marketView.activeType === fundType.id;
+                          return (
+                            <div
+                              key={fundType.id}
+                              className={`rounded-[20px] border px-3 py-3 transition-colors ${
+                                isActive
+                                  ? "border-primary/30 bg-primary/10 shadow-subtle"
+                                  : "border-border/60 bg-background/70"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-[11px] font-semibold text-foreground">{fundType.label}</div>
+                                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{fundType.detail}</p>
+                                </div>
+                                <div
+                                  className={`flex h-9 w-9 items-center justify-center rounded-2xl ${
+                                    isActive ? "bg-primary/14 text-primary" : "bg-primary/8 text-primary/80"
+                                  }`}
+                                >
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    </div>
+                  </div>
+                </div>
 
-                      <p className="text-[11px] leading-5 text-muted-foreground">
-                        Use the session rail for history, the center for streaming answers, and the evidence rail for source inspection.
+                <div className="rounded-[22px] border border-border/70 bg-background/76 px-4 py-3 shadow-subtle">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        Retrieval mode
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Keep the same backend routing options available while the hero stays focused on market context.
                       </p>
                     </div>
+
+                    <ToggleGroup
+                      value={retrievalMode}
+                      onValueChange={(value) => setRetrievalMode(value as RetrievalMode)}
+                      options={[
+                        { value: "code-rag", label: "Code-based RAG" },
+                        { value: "foundry-iq", label: "Foundry IQ" },
+                      ]}
+                    />
                   </div>
                 </div>
 
