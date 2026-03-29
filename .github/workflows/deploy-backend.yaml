@@ -10,9 +10,12 @@ on:
       - 'src/sql_generator.py'
       - 'src/pii_filter.py'
       - 'src/foundry_agent_client.py'
+      - 'src/progress_emitter.py'
+      - 'src/runtime_config.py'
       - 'src/fund_rag_agent.py'
       - 'requirements.txt'
       - 'Dockerfile.backend'
+      - '.dockerignore'
       - 'k8s/**'
   workflow_dispatch:
 

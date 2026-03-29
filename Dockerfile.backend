@@ -27,6 +27,8 @@ COPY src/query_router.py .
 COPY src/sql_generator.py .
 COPY src/pii_filter.py .
 COPY src/foundry_agent_client.py .
+COPY src/progress_emitter.py .
+COPY src/runtime_config.py .
 COPY src/fund_rag_agent.py .
 COPY src/workflow_examples.py .
 

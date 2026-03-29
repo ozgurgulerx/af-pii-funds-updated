@@ -1,0 +1,16 @@
+.git
+.github
+.next
+node_modules
+src/node_modules
+src/.next
+src/out
+src/coverage
+data
+docu
+2025q4_nport
+*.pyc
+__pycache__/
+*.log
+tmp/
+dist/
