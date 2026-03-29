@@ -135,6 +135,27 @@ export default function ChatPage() {
     persistHeroMode("expanded");
   }, [persistHeroMode]);
 
+  const getUniqueCitationsFromMessages = useCallback((conversationMessages: Message[]) => {
+    return conversationMessages
+      .flatMap((message) => message.citations || [])
+      .filter((citation, index, array) => array.findIndex((item) => item.id === citation.id) === index);
+  }, []);
+
+  const activateConversation = useCallback((conversationId: string) => {
+    const conversation = SAMPLE_CONVERSATIONS.find((item) => item.id === conversationId);
+    if (!conversation) return false;
+
+    setActiveConversationId(conversation.id);
+    setMessages(conversation.messages);
+    setCitations(getUniqueCitationsFromMessages(conversation.messages));
+    setActiveCitationId(null);
+    setShowFollowUps(true);
+    setStreamingContent("");
+    setQueryProgress([]);
+    setMobileSidebarOpen(false);
+    return true;
+  }, [getUniqueCitationsFromMessages]);
+
   const normalizeCitations = useCallback((existing: Citation[], incoming: Citation[]) => {
     const knownByRowId = new Map(existing.map((citation) => [citation.rowId, citation]));
     const seenRowIds = new Set(existing.map((citation) => citation.rowId));
@@ -192,21 +213,22 @@ export default function ChatPage() {
 
   const handleSelectConversation = useCallback((id: string) => {
     if (requestInFlightRef.current) return;
+    activateConversation(id);
+  }, [activateConversation]);
 
-    const conversation = SAMPLE_CONVERSATIONS.find((item) => item.id === id);
-    if (!conversation) return;
+  const handleCollapseOverview = useCallback(() => {
+    if (requestInFlightRef.current) return;
 
-    setActiveConversationId(id);
-    setMessages(conversation.messages);
-    setCitations(
-      conversation.messages
-        .flatMap((message) => message.citations || [])
-        .filter((citation, index, array) => array.findIndex((item) => item.id === citation.id) === index)
-    );
-    setActiveCitationId(null);
-    setShowFollowUps(true);
-    setMobileSidebarOpen(false);
-  }, []);
+    const shouldHydrateDefaultConversation = activeConversationId === null && messages.length === 0;
+    if (shouldHydrateDefaultConversation) {
+      const defaultConversationId = SAMPLE_CONVERSATIONS[0]?.id;
+      if (defaultConversationId) {
+        activateConversation(defaultConversationId);
+      }
+    }
+
+    compactHero();
+  }, [activateConversation, activeConversationId, compactHero, messages.length]);
 
   const handleCitationClick = useCallback((id: number) => {
     setActiveCitationId((previous) => (previous === id ? null : id));
@@ -557,7 +579,7 @@ export default function ChatPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={compactHero}
+                            onClick={handleCollapseOverview}
                             className="gap-2 self-end bg-background/82 sm:self-auto"
                           >
                             <ChevronDown className="h-3.5 w-3.5" />
