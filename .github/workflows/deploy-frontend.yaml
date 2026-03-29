@@ -16,6 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
 
 env:
@@ -44,6 +45,13 @@ jobs:
       - name: Build application
         working-directory: ./src
         run: npm run build
+
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Prepare deployment package
         working-directory: ./src
@@ -92,11 +100,13 @@ jobs:
           ls -la /tmp/deploy/.next/
 
       - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: /tmp/app.zip
+        run: |
+          az webapp deploy \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --src-path /tmp/app.zip \
+            --type zip \
+            --restart true
 
       - name: Verify deployment
         run: |
