@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
+  EyeOff,
   FileSearch,
   Globe2,
   LayoutPanelLeft,
@@ -81,6 +82,7 @@ export default function ChatPage() {
   const [streamingContent, setStreamingContent] = useState("");
   const [queryProgress, setQueryProgress] = useState<ToolTraceStep[]>([]);
   const [showFollowUps, setShowFollowUps] = useState(true);
+  const [heroDismissed, setHeroDismissed] = useState(false);
 
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null);
@@ -90,6 +92,7 @@ export default function ChatPage() {
     setShowFollowUps(false);
     setStreamingContent("");
     setMobileSidebarOpen(false);
+    setHeroDismissed(false);
   }, []);
 
   const handleSelectConversation = useCallback((id: string) => {
@@ -344,7 +347,7 @@ export default function ChatPage() {
     [activeCitationId, activeConversationId, citations.length, messages.length, retrievalMode]
   );
 
-  const showHero = messages.length === 0;
+  const showHero = !heroDismissed && !activeConversationId && messages.length === 0;
 
   return (
     <div className="relative flex h-full overflow-hidden">
@@ -385,14 +388,26 @@ export default function ChatPage() {
 
                   <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.92fr)]">
                     <div className="rounded-[24px] border border-border/60 bg-background/78 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="gold" className="gap-1.5">
-                          <ShieldCheck className="h-3 w-3" />
-                          Protected chat
-                        </Badge>
-                        <Badge variant="outline" className="bg-background/78">
-                          {activeConversationId ? "Saved session" : "Fresh draft"}
-                        </Badge>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="gold" className="gap-1.5">
+                            <ShieldCheck className="h-3 w-3" />
+                            Protected chat
+                          </Badge>
+                          <Badge variant="outline" className="bg-background/78">
+                            Fresh draft
+                          </Badge>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHeroDismissed(true)}
+                          className="gap-2 bg-background/82"
+                        >
+                          <EyeOff className="h-3.5 w-3.5" />
+                          Hide overview
+                        </Button>
                       </div>
 
                       <div className="mt-4 space-y-2">
