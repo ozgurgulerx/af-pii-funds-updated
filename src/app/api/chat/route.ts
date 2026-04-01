@@ -9,13 +9,13 @@ const MessageSchema = z.object({
 
 const RequestSchema = z.object({
   messages: z.array(MessageSchema),
-  retrievalMode: z.enum(["code-rag", "foundry-iq"]).optional().default("code-rag"),
+  retrievalMode: z.enum(["code-rag", "foundry-iq", "fabric-iq", "rti-iq"]).optional().default("code-rag"),
 });
 
 const PYTHON_API_URL = process.env.BACKEND_URL || process.env.PYTHON_API_URL || "http://localhost:5001";
 const encoder = new TextEncoder();
 
-type RetrievalMode = "code-rag" | "foundry-iq";
+type RetrievalMode = "code-rag" | "foundry-iq" | "fabric-iq" | "rti-iq";
 
 type BackendCitation = {
   source_type: string;
@@ -67,6 +67,8 @@ async function fetchWithRetry(
 }
 
 function mapRouteToRetrievalToolName(route: string, retrievalMode: RetrievalMode, sqlQuery?: string): string {
+  if (retrievalMode === "rti-iq" || route === "RTI_IQ") return "RTI / IQ";
+  if (retrievalMode === "fabric-iq" || route === "FABRIC_IQ") return "Fabric IQ";
   if (retrievalMode === "foundry-iq" || route === "FOUNDRY_IQ") return "Foundry IQ";
 
   switch (route) {
@@ -126,6 +128,10 @@ function mapCitationDataset(sourceType: string): string {
       return "imf_raptor";
     case "foundry_iq":
       return "foundry_iq";
+    case "fabric_iq":
+      return "fabric_iq";
+    case "rti_iq":
+      return "rti_iq";
     default:
       return sourceType || "unknown";
   }
@@ -330,7 +336,7 @@ async function streamResultToClient(
     encoder.encode(
       createSSEMessage({
         type: "done",
-        isVerified: data.route === "FOUNDRY_IQ" || Boolean(data.citations?.length),
+        isVerified: data.route === "FOUNDRY_IQ" || data.route === "FABRIC_IQ" || data.route === "RTI_IQ" || Boolean(data.citations?.length),
       }),
     ),
   );

@@ -287,6 +287,13 @@ export const ENHANCED_FOLLOW_UP_SUGGESTIONS: FollowUpSuggestion[] = [
   { text: "Compare duration risk: Vanguard vs PIMCO", type: "sql" },
 ];
 
+export const RTI_IQ_FOLLOW_UP_SUGGESTIONS: FollowUpSuggestion[] = [
+  { text: "Show a fund to issuer path for a sample fund", type: "sql" },
+  { text: "Which issuers are connected to the same fund through holdings?", type: "sql" },
+  { text: "Trace Fund to Holding to Instrument to Issuer for one example", type: "chain" },
+  { text: "Which funds share an issuer in the RTI / IQ proof lane?", type: "chain" },
+];
+
 // Demo queries for live presentations - designed to be impressive and topical
 export const DEMO_QUERIES = {
   // Code-based RAG queries (work with SQL/SEMANTIC/RAPTOR/CHAIN routes)
@@ -322,6 +329,12 @@ export const DEMO_QUERIES = {
     { query: "How do interest rates affect bond prices?", description: "Market mechanics" },
     { query: "Best practices for fixed income allocation", description: "Investment guidance" },
     { query: "Compare active vs passive bond fund strategies", description: "Strategy comparison" },
+  ],
+
+  rtiIq: [
+    { query: "Show a Fund to Holding to Instrument to Issuer path for one sample fund", description: "Graph proof traversal" },
+    { query: "Which issuers appear under the same fund through holdings?", description: "Connected issuer lookup" },
+    { query: "Find a shared issuer across two funds in the RTI / IQ proof lane", description: "Cross-fund graph check" },
   ],
 };
 

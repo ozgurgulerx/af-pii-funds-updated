@@ -33,3 +33,8 @@ data:
   AZURE_OPENAI_ENDPOINT_FOUNDRY: "https://ozgurguler-7212-resource.openai.azure.com"
   FOUNDRY_AGENT_NAME: "funds-foundry-IQ-agent"
   FOUNDRY_MODEL_DEPLOYMENT: "gpt-5-nano"
+
+  # Separate Fabric IQ lane configuration
+  FABRIC_IQ_FOUNDRY_BASE_URL: "https://xxxxxxx.services.ai.azure.com"
+  FABRIC_IQ_FOUNDRY_PROJECT: "admin-4912"
+  FABRIC_IQ_AGENT_NAME: "af-funds-fabric-agent"

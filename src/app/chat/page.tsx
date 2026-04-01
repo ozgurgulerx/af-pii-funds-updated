@@ -29,17 +29,19 @@ import { generateId } from "@/lib/utils";
 import {
   ENHANCED_FOLLOW_UP_SUGGESTIONS,
   HERO_PROFILE_SUGGESTIONS,
+  RTI_IQ_FOLLOW_UP_SUGGESTIONS,
   SAMPLE_CONVERSATIONS,
   type HeroProfileId,
 } from "@/data/seed";
 import type { Artifact, Citation, Message, PiiStatus, ToolTraceStep } from "@/types";
 
-type RetrievalMode = "code-rag" | "foundry-iq";
+type RetrievalMode = "code-rag" | "foundry-iq" | "fabric-iq" | "rti-iq";
 type HeroDisplayMode = "expanded" | "compact";
 type RightRailTab = "evidence" | "tooltrace";
 
 const HERO_SESSION_KEY = "af-pii-funds-updated:chat-hero-mode";
 const HERO_TRANSITION = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
+const RTI_IQ_ENABLED = process.env.NEXT_PUBLIC_ENABLE_RTI_IQ === "true";
 
 const HERO_PROFILE_META: Record<
   HeroProfileId,
@@ -112,6 +114,12 @@ export default function ChatPage() {
   const [queryProgress, setQueryProgress] = useState<ToolTraceStep[]>([]);
   const [activeRightTab, setActiveRightTab] = useState<RightRailTab>("evidence");
   const [showFollowUps, setShowFollowUps] = useState(true);
+
+  useEffect(() => {
+    if (!RTI_IQ_ENABLED && retrievalMode === "rti-iq") {
+      setRetrievalMode("code-rag");
+    }
+  }, [retrievalMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -470,9 +478,14 @@ export default function ChatPage() {
     void handleSendMessage(query);
   }, [handleSendMessage, isLoading]);
 
+  const followUpSuggestions = useMemo(
+    () => (retrievalMode === "rti-iq" ? RTI_IQ_FOLLOW_UP_SUGGESTIONS : ENHANCED_FOLLOW_UP_SUGGESTIONS),
+    [retrievalMode]
+  );
+
   const quickPrompts = useMemo(
-    () => ENHANCED_FOLLOW_UP_SUGGESTIONS.slice(0, 4).map((suggestion) => suggestion.text),
-    []
+    () => followUpSuggestions.slice(0, 4).map((suggestion) => suggestion.text),
+    [followUpSuggestions]
   );
 
   const marketView = useMemo(() => {
@@ -543,6 +556,16 @@ export default function ChatPage() {
   const latestAssistantTrace = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant" && (message.toolTrace?.length ?? 0) > 0)?.toolTrace ?? [],
     [messages]
+  );
+
+  const retrievalModeOptions = useMemo(
+    () => [
+      { value: "code-rag", label: "Code-based RAG" },
+      { value: "foundry-iq", label: "Foundry IQ" },
+      { value: "fabric-iq", label: "Fabric IQ" },
+      ...(RTI_IQ_ENABLED ? [{ value: "rti-iq", label: "RTI / IQ" }] : []),
+    ],
+    []
   );
 
   const rightRailToolTrace = isLoading && queryProgress.length > 0 ? queryProgress : latestAssistantTrace;
@@ -815,10 +838,11 @@ export default function ChatPage() {
             onCitationClick={handleCitationClick}
             activeCitationId={activeCitationId}
             onSendMessage={handleSendMessage}
+            openingPrompts={followUpSuggestions.map((suggestion) => suggestion.text)}
           />
 
           <FollowUpChips
-            suggestions={ENHANCED_FOLLOW_UP_SUGGESTIONS}
+            suggestions={followUpSuggestions}
             onSelect={handleSendMessage}
             isVisible={showFollowUps && !isLoading && messages.length > 0}
           />
@@ -832,17 +856,14 @@ export default function ChatPage() {
                       Retrieval mode
                     </div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Switch between `Code-based RAG` and `Foundry IQ` without changing the hero summary state.
+                      Switch retrieval lanes without changing the rest of the chat workflow.
                     </p>
                   </div>
 
                   <ToggleGroup
                     value={retrievalMode}
                     onValueChange={(value) => setRetrievalMode(value as RetrievalMode)}
-                    options={[
-                      { value: "code-rag", label: "Code-based RAG" },
-                      { value: "foundry-iq", label: "Foundry IQ" },
-                    ]}
+                    options={retrievalModeOptions}
                   />
                 </div>
               </div>

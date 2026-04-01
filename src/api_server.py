@@ -11,7 +11,9 @@ import time
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from unified_retriever import UnifiedRetriever
+from fabric_iq_agent_client import FabricIQAgentClient
 from foundry_agent_client import FoundryAgentClient
+from rti_iq_agent_client import RTIIQAgentClient
 from progress_emitter import (
     ErrorEvent,
     MetadataEvent,
@@ -33,6 +35,14 @@ print("Retriever ready!")
 print("Initializing Foundry IQ client...")
 foundry_client = FoundryAgentClient()
 print("Foundry IQ client ready!")
+
+print("Initializing Fabric IQ client...")
+fabric_iq_client = FabricIQAgentClient()
+print("Fabric IQ client ready!")
+
+print("Initializing RTI / IQ client...")
+rti_iq_client = RTIIQAgentClient()
+print("RTI / IQ client ready!")
 
 ALLOWED_QUERY_ROUTES = {"SQL", "SEMANTIC", "RAPTOR", "SEMANTIC_RAPTOR", "HYBRID", "CHAIN"}
 
@@ -82,19 +92,211 @@ def build_backend_query(message: str, messages: list | None, max_history: int = 
     return f"Conversation history:\n{history_block}\n\nCurrent user question:\n{message}"
 
 
-def format_foundry_citations(raw_citations: list | None) -> list[dict]:
+def format_agent_citations(
+    raw_citations: list | None,
+    *,
+    source_type: str,
+    default_title: str,
+) -> list[dict]:
     formatted_citations = []
     for citation in raw_citations or []:
         if not isinstance(citation, dict):
             continue
+        url_citation = citation.get("url_citation", {})
         formatted_citations.append({
-            "source_type": "foundry_iq",
-            "identifier": citation.get("url_citation", {}).get("title", citation.get("text", "Unknown")),
-            "title": citation.get("url_citation", {}).get("title", "Foundry IQ Knowledge Base"),
+            "source_type": source_type,
+            "identifier": url_citation.get("title", citation.get("text", "Unknown")),
+            "title": url_citation.get("title", default_title),
             "content_preview": citation.get("text", ""),
             "score": 1.0,
         })
     return formatted_citations
+
+
+def get_agent_lane_config(retrieval_mode: str) -> dict | None:
+    lane_configs = {
+        "foundry-iq": {
+            "client": foundry_client,
+            "route": "FOUNDRY_IQ",
+            "display_name": "Foundry IQ",
+            "source_type": "foundry_iq",
+            "default_title": "Foundry IQ Knowledge Base",
+            "retrieval_step_id": "retrieval-foundry-iq",
+        },
+        "fabric-iq": {
+            "client": fabric_iq_client,
+            "route": "FABRIC_IQ",
+            "display_name": "Fabric IQ",
+            "source_type": "fabric_iq",
+            "default_title": "Fabric IQ Knowledge Base",
+            "retrieval_step_id": "retrieval-fabric-iq",
+        },
+        "rti-iq": {
+            "client": rti_iq_client,
+            "route": "RTI_IQ",
+            "display_name": "RTI / IQ",
+            "source_type": "rti_iq",
+            "default_title": "RTI / IQ Agent",
+            "retrieval_step_id": "retrieval-rti-iq",
+        },
+    }
+    return lane_configs.get(retrieval_mode)
+
+
+def run_agent_lane(retrieval_mode: str, backend_query: str, conversation_id: str | None) -> tuple[dict, dict, list[dict]]:
+    lane = get_agent_lane_config(retrieval_mode)
+    if lane is None:
+        raise ValueError(f"Unsupported agent retrieval mode {retrieval_mode!r}")
+
+    agent_result = lane["client"].chat(backend_query, conversation_id=conversation_id)
+    formatted_citations = format_agent_citations(
+        agent_result.get("citations", []),
+        source_type=lane["source_type"],
+        default_title=lane["default_title"],
+    )
+    return lane, agent_result, formatted_citations
+
+
+def build_agent_lane_response(lane: dict, agent_result: dict, formatted_citations: list[dict]) -> dict:
+    return {
+        "answer": agent_result.get("answer", "No answer available"),
+        "route": lane["route"],
+        "reasoning": f"Using {lane['display_name']} agent ({agent_result.get('agent', 'unknown')})",
+        "citations": formatted_citations,
+        "pii_blocked": False,
+        "pii_warning": None,
+        "sql_query": None,
+        "conversation_id": agent_result.get("conversation_id"),
+    }
+
+
+def emit_agent_lane_stream(
+    emitter: ProgressEmitter,
+    *,
+    retrieval_mode: str,
+    message: str,
+    backend_query: str,
+    conversation_id: str | None,
+    prior_message_count: int,
+    use_llm_routing: bool,
+) -> None:
+    lane = get_agent_lane_config(retrieval_mode)
+    if lane is None:
+        raise ValueError(f"Unsupported agent retrieval mode {retrieval_mode!r}")
+    display_name = lane["display_name"]
+    route = lane["route"]
+    source_type = lane["source_type"]
+    route_reasoning = f"using {display_name} agent"
+
+    rewrite_input = f"history_len={prior_message_count}"
+    emitter.start("query-rewrite", "Query Rewrite", rewrite_input)
+    rewrite_started = time.perf_counter()
+    emitter.complete(
+        "query-rewrite",
+        "Query Rewrite",
+        int((time.perf_counter() - rewrite_started) * 1000),
+        "skipped: already standalone" if prior_message_count > 0 else "skipped: no_history",
+        rewrite_input,
+    )
+
+    analysis_input = f"query: {message}"
+    emitter.start("query-analysis", "Query Analysis", analysis_input)
+    analysis_started = time.perf_counter()
+    emitter.complete(
+        "query-analysis",
+        "Query Analysis",
+        int((time.perf_counter() - analysis_started) * 1000),
+        retriever._build_query_analysis_output(message, route),
+        analysis_input,
+    )
+
+    route_input = "message inspection"
+    emitter.start("intent-router-v2", "Intent Router V2", route_input)
+    route_started = time.perf_counter()
+    route_confidence = build_route_confidence(use_llm_routing)
+    emitter.complete(
+        "intent-router-v2",
+        "Intent Router V2",
+        int((time.perf_counter() - route_started) * 1000),
+        f"route={route} confidence={route_confidence:.2f}; {route_reasoning}",
+        route_input,
+    )
+
+    retrieval_input = f"filters: {display_name} agent retrieval"
+    emitter.start(lane["retrieval_step_id"], display_name, retrieval_input)
+    retrieval_started = time.perf_counter()
+    _, agent_result, formatted_citations = run_agent_lane(retrieval_mode, backend_query, conversation_id)
+    emitter.complete(
+        lane["retrieval_step_id"],
+        display_name,
+        int((time.perf_counter() - retrieval_started) * 1000),
+        f"{len(formatted_citations)} citation(s) prepared",
+        retrieval_input,
+    )
+
+    emitter.start("answer-brief", "Answer Brief Builder", analysis_input)
+    brief_started = time.perf_counter()
+    emitter.complete(
+        "answer-brief",
+        "Answer Brief Builder",
+        int((time.perf_counter() - brief_started) * 1000),
+        "summary composed from model response",
+        analysis_input,
+    )
+
+    emitter.emit_metadata(
+        MetadataEvent(
+            intent="GENERAL",
+            sources_used=[source_type] if formatted_citations else [],
+            route=route,
+            route_confidence=route_confidence,
+            route_reasoning=route_reasoning,
+            artifacts=[],
+        )
+    )
+
+    answer_text = agent_result.get("answer", "No answer available")
+    generation_input = f"query: {message}"
+    emitter.start("llm-generate", "LLM Response Generation", generation_input)
+    generation_started = time.perf_counter()
+    for token in answer_text.split(" "):
+        if not token:
+            continue
+        emitter.emit_text_chunk(token + " ")
+    emitter.complete(
+        "llm-generate",
+        "LLM Response Generation",
+        int((time.perf_counter() - generation_started) * 1000),
+        f"answer length={len(answer_text)} chars",
+        generation_input,
+    )
+
+    emitter.start("answer-validation", "Answer Validation", generation_input)
+    validation_started = time.perf_counter()
+    emitter.complete(
+        "answer-validation",
+        "Answer Validation",
+        int((time.perf_counter() - validation_started) * 1000),
+        (
+            f"verified with {len(formatted_citations)} citation(s)"
+            if formatted_citations
+            else "verified without explicit citations"
+        ),
+        generation_input,
+    )
+
+    emitter.finish_streaming(
+        ResultEvent(
+            answer=answer_text,
+            citations=formatted_citations,
+            sources_used=[source_type] if formatted_citations else [],
+            intent="GENERAL",
+            route=route,
+            route_confidence=route_confidence,
+            route_reasoning=route_reasoning,
+            artifacts=[],
+        )
+    )
 
 
 def build_route_confidence(use_llm_routing: bool, forced_route: str | None = None) -> float:
@@ -160,7 +362,7 @@ def build_streaming_response(emitter: ProgressEmitter):
                         yield sse_message({"type": "text", "content": token + " "})
 
                 yield sse_message({"type": "citations", "citations": event.citations})
-                is_verified = bool(event.citations) or event.route == "FOUNDRY_IQ"
+                is_verified = bool(event.citations) or event.route in {"FOUNDRY_IQ", "FABRIC_IQ", "RTI_IQ"}
                 yield sse_message({"type": "done", "isVerified": is_verified})
             elif isinstance(event, ErrorEvent):
                 yield sse_message({"type": "error", "message": event.message})
@@ -194,13 +396,13 @@ def chat():
     Request body:
         {
             "message": "What are the top 5 bond funds?",
-            "retrieval_mode": "code-rag" | "foundry-iq"
+            "retrieval_mode": "code-rag" | "foundry-iq" | "fabric-iq" | "rti-iq"
         }
 
     Response:
         {
             "answer": "...",
-            "route": "SQL|SEMANTIC|RAPTOR|HYBRID|CHAIN|FOUNDRY_IQ",
+            "route": "SQL|SEMANTIC|RAPTOR|HYBRID|CHAIN|FOUNDRY_IQ|FABRIC_IQ|RTI_IQ",
             "citations": [...],
             "pii_blocked": false
         }
@@ -218,25 +420,9 @@ def chat():
         retrieval_mode = data.get('retrieval_mode', 'code-rag')
         backend_query = build_backend_query(message, messages)
 
-        if retrieval_mode == 'foundry-iq':
-            # Use Foundry IQ Agent
-            foundry_result = foundry_client.chat(backend_query, conversation_id=conversation_id)
-
-            # Format Foundry IQ citations to match code-rag format
-            formatted_citations = format_foundry_citations(foundry_result.get("citations", []))
-
-            response = {
-                "answer": foundry_result.get("answer", "No answer available"),
-                "route": "FOUNDRY_IQ",
-                "reasoning": f"Using Foundry IQ agent ({foundry_result.get('agent', 'unknown')})",
-                "citations": formatted_citations,
-                "pii_blocked": False,
-                "pii_warning": None,
-                "sql_query": None,
-                "conversation_id": foundry_result.get("conversation_id")
-            }
-
-            return jsonify(response)
+        if retrieval_mode in {"foundry-iq", "fabric-iq", "rti-iq"}:
+            lane, agent_result, formatted_citations = run_agent_lane(retrieval_mode, backend_query, conversation_id)
+            return jsonify(build_agent_lane_response(lane, agent_result, formatted_citations))
 
         # Default: Use code-based RAG (JSON response for all routes)
         result = retriever.answer(backend_query, use_llm_routing=use_llm_routing)
@@ -368,116 +554,15 @@ def chat_stream():
                     compact_input,
                 )
 
-                if retrieval_mode == 'foundry-iq':
-                    rewrite_input = f"history_len={prior_message_count}"
-                    emitter.start("query-rewrite", "Query Rewrite", rewrite_input)
-                    rewrite_started = time.perf_counter()
-                    emitter.complete(
-                        "query-rewrite",
-                        "Query Rewrite",
-                        int((time.perf_counter() - rewrite_started) * 1000),
-                        "skipped: already standalone" if prior_message_count > 0 else "skipped: no_history",
-                        rewrite_input,
-                    )
-
-                    analysis_input = f"query: {message}"
-                    emitter.start("query-analysis", "Query Analysis", analysis_input)
-                    analysis_started = time.perf_counter()
-                    emitter.complete(
-                        "query-analysis",
-                        "Query Analysis",
-                        int((time.perf_counter() - analysis_started) * 1000),
-                        retriever._build_query_analysis_output(message, "FOUNDRY_IQ"),
-                        analysis_input,
-                    )
-
-                    route_input = "message inspection"
-                    emitter.start("intent-router-v2", "Intent Router V2", route_input)
-                    route_started = time.perf_counter()
-                    route_confidence = build_route_confidence(use_llm_routing)
-                    emitter.complete(
-                        "intent-router-v2",
-                        "Intent Router V2",
-                        int((time.perf_counter() - route_started) * 1000),
-                        f"route=FOUNDRY_IQ confidence={route_confidence:.2f}; using Foundry IQ agent",
-                        route_input,
-                    )
-
-                    retrieval_input = "filters: Foundry IQ agent retrieval"
-                    emitter.start("retrieval-foundry-iq", "Foundry IQ", retrieval_input)
-                    retrieval_started = time.perf_counter()
-                    foundry_result = foundry_client.chat(backend_query, conversation_id=conversation_id)
-                    formatted_citations = format_foundry_citations(foundry_result.get("citations", []))
-                    emitter.complete(
-                        "retrieval-foundry-iq",
-                        "Foundry IQ",
-                        int((time.perf_counter() - retrieval_started) * 1000),
-                        f"{len(formatted_citations)} citation(s) prepared",
-                        retrieval_input,
-                    )
-
-                    emitter.start("answer-brief", "Answer Brief Builder", analysis_input)
-                    brief_started = time.perf_counter()
-                    emitter.complete(
-                        "answer-brief",
-                        "Answer Brief Builder",
-                        int((time.perf_counter() - brief_started) * 1000),
-                        "summary composed from model response",
-                        analysis_input,
-                    )
-
-                    emitter.emit_metadata(
-                        MetadataEvent(
-                            intent="GENERAL",
-                            sources_used=["foundry_iq"] if formatted_citations else [],
-                            route="FOUNDRY_IQ",
-                            route_confidence=route_confidence,
-                            route_reasoning="using Foundry IQ agent",
-                            artifacts=[],
-                        )
-                    )
-
-                    answer_text = foundry_result.get("answer", "No answer available")
-                    generation_input = f"query: {message}"
-                    emitter.start("llm-generate", "LLM Response Generation", generation_input)
-                    generation_started = time.perf_counter()
-                    for token in answer_text.split(" "):
-                        if not token:
-                            continue
-                        emitter.emit_text_chunk(token + " ")
-                    emitter.complete(
-                        "llm-generate",
-                        "LLM Response Generation",
-                        int((time.perf_counter() - generation_started) * 1000),
-                        f"answer length={len(answer_text)} chars",
-                        generation_input,
-                    )
-
-                    emitter.start("answer-validation", "Answer Validation", generation_input)
-                    validation_started = time.perf_counter()
-                    emitter.complete(
-                        "answer-validation",
-                        "Answer Validation",
-                        int((time.perf_counter() - validation_started) * 1000),
-                        (
-                            f"verified with {len(formatted_citations)} citation(s)"
-                            if formatted_citations
-                            else "verified without explicit citations"
-                        ),
-                        generation_input,
-                    )
-
-                    emitter.finish_streaming(
-                        ResultEvent(
-                            answer=answer_text,
-                            citations=formatted_citations,
-                            sources_used=["foundry_iq"] if formatted_citations else [],
-                            intent="GENERAL",
-                            route="FOUNDRY_IQ",
-                            route_confidence=route_confidence,
-                            route_reasoning="using Foundry IQ agent",
-                            artifacts=[],
-                        )
+                if retrieval_mode in {"foundry-iq", "fabric-iq", "rti-iq"}:
+                    emit_agent_lane_stream(
+                        emitter,
+                        retrieval_mode=retrieval_mode,
+                        message=message,
+                        backend_query=backend_query,
+                        conversation_id=conversation_id,
+                        prior_message_count=prior_message_count,
+                        use_llm_routing=use_llm_routing,
                     )
                     return
 
@@ -549,7 +634,7 @@ if __name__ == '__main__':
     print("Endpoints:")
     print("  GET  /health     - Health check")
     print("  POST /api/chat   - Chat with fund RAG")
-    print("                     retrieval_mode: 'code-rag' | 'foundry-iq'")
+    print("                     retrieval_mode: 'code-rag' | 'foundry-iq' | 'fabric-iq' | 'rti-iq'")
     print("  POST /api/chat/stream - Streaming chat with trace telemetry")
     print("  POST /api/query  - Direct query")
     print("=" * 60)

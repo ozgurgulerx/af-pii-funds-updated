@@ -20,6 +20,8 @@ const TOOL_NAME_LABELS: Record<string, string> = {
   "PostgreSQL (SQL Query)": "PostgreSQL (SQL Query)",
   "Chain (Market → Fund)": "Chain (Market → Fund)",
   "Foundry IQ": "Foundry IQ",
+  "Fabric IQ": "Fabric IQ",
+  "RTI / IQ": "RTI / IQ",
 };
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -34,6 +36,8 @@ const ROUTE_LABELS: Record<string, string> = {
   CHAIN: "Chain",
   AGENTIC: "Agentic",
   FOUNDRY_IQ: "Foundry IQ",
+  FABRIC_IQ: "Fabric IQ",
+  RTI_IQ: "RTI / IQ",
 };
 
 export function localizeRouteLabel(route: string): string {

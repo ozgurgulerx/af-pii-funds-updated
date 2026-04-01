@@ -21,19 +21,54 @@ class FoundryAgentClient:
     # Maximum number of tool approval iterations to prevent infinite loops
     MAX_APPROVAL_ITERATIONS = 10
 
-    def __init__(self, agent_name: str = "funds-foundry-IQ-agent"):
+    def __init__(
+        self,
+        agent_name: str = "funds-foundry-IQ-agent",
+        *,
+        base_url: str | None = None,
+        project: str | None = None,
+        display_name: str = "Foundry IQ",
+        source_name: str | None = None,
+        error_mode_hint: str = "Please try Code-based RAG mode instead.",
+        require_explicit_config: bool = False,
+        explicit_config_field_names: tuple[str, str, str] | None = None,
+        allow_default_project_config: bool = True,
+    ):
         self.agent_name = agent_name
+        self.display_name = display_name
+        self.source_name = source_name or agent_name
+        self.error_mode_hint = error_mode_hint
 
         # Azure AI Foundry project configuration
-        self.base_url = os.getenv(
-            "AZURE_AI_FOUNDRY_BASE_URL",
+        default_base_url = (
             "https://ozgurguler-7212-resource.services.ai.azure.com"
+            if allow_default_project_config
+            else None
         )
-        self.project = os.getenv(
-            "AZURE_AI_FOUNDRY_PROJECT",
-            "ozgurguler-7212"
-        )
+        default_project = "ozgurguler-7212" if allow_default_project_config else None
+        self.base_url = base_url if base_url is not None else os.getenv("AZURE_AI_FOUNDRY_BASE_URL", default_base_url)
+        self.project = project if project is not None else os.getenv("AZURE_AI_FOUNDRY_PROJECT", default_project)
         self.api_version = "2025-05-15-preview"
+        self.config_error = None
+
+        if require_explicit_config:
+            field_names = explicit_config_field_names or (
+                "AGENT_NAME",
+                "AZURE_AI_FOUNDRY_BASE_URL",
+                "AZURE_AI_FOUNDRY_PROJECT",
+            )
+            missing_fields = []
+            if not self.agent_name:
+                missing_fields.append(field_names[0])
+            if not self.base_url:
+                missing_fields.append(field_names[1])
+            if not self.project:
+                missing_fields.append(field_names[2])
+            if missing_fields:
+                self.config_error = (
+                    f"{self.display_name} configuration is incomplete. "
+                    f"Missing: {', '.join(missing_fields)}."
+                )
 
         # Use DefaultAzureCredential for flexibility (works with CLI, managed identity, etc.)
         self.credential = DefaultAzureCredential()
@@ -123,6 +158,14 @@ class FoundryAgentClient:
         Returns:
             dict with 'answer', 'agent', 'citations', 'conversation_id'
         """
+        if self.config_error:
+            return {
+                "answer": self.config_error,
+                "agent": self.agent_name or self.display_name,
+                "citations": [],
+                "error": True,
+            }
+
         url = f"{self.base_url}/api/projects/{self.project}/openai/responses"
 
         headers = {
@@ -151,9 +194,9 @@ class FoundryAgentClient:
 
             if not response.ok:
                 error_text = response.text
-                print(f"Foundry IQ agent error: {response.status_code} - {error_text}")
+                print(f"{self.display_name} agent error: {response.status_code} - {error_text}")
                 return {
-                    "answer": f"Foundry IQ agent error: {response.status_code}. Please try Code-based RAG mode instead.",
+                    "answer": f"{self.display_name} agent error: {response.status_code}. {self.error_mode_hint}",
                     "agent": self.agent_name,
                     "citations": [],
                     "error": True
@@ -170,7 +213,7 @@ class FoundryAgentClient:
                     "agent": self.agent_name,
                     "citations": citations,
                     "conversation_id": data.get("conversation"),
-                    "source": "funds-foundry-IQ-agent"
+                    "source": self.source_name
                 }
 
             # Loop to handle MCP tool approvals
@@ -186,7 +229,7 @@ class FoundryAgentClient:
                             "agent": self.agent_name,
                             "citations": citations,
                             "conversation_id": data.get("conversation"),
-                            "source": "funds-foundry-IQ-agent"
+                            "source": self.source_name
                         }
                     else:
                         # No approvals and no message - something unexpected
@@ -218,9 +261,9 @@ class FoundryAgentClient:
 
                 if not response.ok:
                     error_text = response.text
-                    print(f"Foundry IQ agent approval error: {response.status_code} - {error_text}")
+                    print(f"{self.display_name} agent approval error: {response.status_code} - {error_text}")
                     return {
-                        "answer": f"Error during knowledge base retrieval: {response.status_code}",
+                        "answer": f"Error during {self.display_name} knowledge retrieval: {response.status_code}",
                         "agent": self.agent_name,
                         "citations": [],
                         "error": True
@@ -237,8 +280,8 @@ class FoundryAgentClient:
                         "agent": self.agent_name,
                         "citations": citations,
                         "conversation_id": data.get("conversation"),
-                        "source": "funds-foundry-IQ-agent"
-                    }
+                            "source": self.source_name
+                        }
 
             # Max iterations reached without final message
             return {
@@ -249,19 +292,19 @@ class FoundryAgentClient:
             }
 
         except requests.exceptions.Timeout:
-            print("Foundry IQ agent timeout")
+            print(f"{self.display_name} agent timeout")
             return {
-                "answer": "Foundry IQ agent timed out. Please try again or use Code-based RAG mode.",
+                "answer": f"{self.display_name} agent timed out. {self.error_mode_hint}",
                 "agent": self.agent_name,
                 "citations": [],
                 "error": True
             }
         except Exception as e:
-            print(f"Foundry IQ agent error: {e}")
+            print(f"{self.display_name} agent error: {e}")
             import traceback
             traceback.print_exc()
             return {
-                "answer": f"Foundry IQ agent encountered an error: {str(e)}. Please try the Code-based RAG mode instead.",
+                "answer": f"{self.display_name} agent encountered an error: {str(e)}. {self.error_mode_hint}",
                 "agent": self.agent_name,
                 "citations": [],
                 "error": True

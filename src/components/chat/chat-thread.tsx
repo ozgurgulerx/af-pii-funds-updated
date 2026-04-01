@@ -18,7 +18,6 @@ import {
   localizeTraceOutputSummary,
 } from "@/lib/tool-trace";
 import { Message } from "./message";
-import { ENHANCED_FOLLOW_UP_SUGGESTIONS } from "@/data/seed";
 import type { Message as MessageType, ToolTraceStep } from "@/types";
 
 interface ChatThreadProps {
@@ -29,6 +28,7 @@ interface ChatThreadProps {
   onCitationClick?: (id: number) => void;
   activeCitationId?: number | null;
   onSendMessage?: (message: string) => void;
+  openingPrompts?: string[];
 }
 
 export function ChatThread({
@@ -39,6 +39,7 @@ export function ChatThread({
   onCitationClick,
   activeCitationId,
   onSendMessage,
+  openingPrompts = [],
 }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -46,16 +47,13 @@ export function ChatThread({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, streamingContent, queryProgress]);
 
-  const openingPrompts = useMemo(
-    () => ENHANCED_FOLLOW_UP_SUGGESTIONS.slice(0, 5),
-    []
-  );
+  const emptyStatePrompts = useMemo(() => openingPrompts.slice(0, 5), [openingPrompts]);
 
   return (
     <ScrollArea className="flex-1 min-h-0" viewportClassName="h-full">
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-3 py-4 md:px-5 md:py-5">
         {messages.length === 0 ? (
-          <EmptyState prompts={openingPrompts.map((prompt) => prompt.text)} onSendMessage={onSendMessage} />
+          <EmptyState prompts={emptyStatePrompts} onSendMessage={onSendMessage} />
         ) : (
           <div className="flex flex-1 flex-col gap-4">
             <AnimatePresence mode="popLayout">
