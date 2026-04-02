@@ -221,11 +221,11 @@ def run_agent_lane(
     agent_result = lane["client"].chat(backend_query, conversation_id=conversation_id)
     if (
         retrieval_mode == "foundry-iq"
-        and agent_result.get("error")
+        and (agent_result.get("error") or not agent_result.get("citations"))
         and getattr(fabric_iq_client, "config_error", None) is None
     ):
         fabric_result = fabric_iq_client.chat(backend_query, conversation_id=conversation_id)
-        if not fabric_result.get("error"):
+        if not fabric_result.get("error") and fabric_result.get("citations"):
             fabric_lane = get_agent_lane_config("fabric-iq")
             if fabric_lane is not None:
                 lane = fabric_lane

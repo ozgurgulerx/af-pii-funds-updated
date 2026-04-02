@@ -187,3 +187,49 @@ def test_run_agent_lane_falls_back_to_code_rag_when_agent_lanes_fail(monkeypatch
             "score": 0.92,
         }
     ]
+
+
+def test_run_agent_lane_does_not_trust_uncited_foundry_answer(monkeypatch):
+    module = load_api_server_module(monkeypatch)
+
+    module.foundry_client = types.SimpleNamespace(
+        config_error=None,
+        chat=lambda message, conversation_id=None: {
+            "answer": "I can retry the holdings lookup if you want.",
+            "agent": "funds-foundry-IQ-agent",
+            "citations": [],
+            "error": False,
+        },
+    )
+    module.fabric_iq_client = types.SimpleNamespace(
+        config_error=None,
+        chat=lambda message, conversation_id=None: {
+            "answer": "Grounded Fabric-backed answer",
+            "agent": "af-funds-fabric-agent",
+            "citations": [
+                {
+                    "text": "Ranked funds from Fabric",
+                    "url_citation": {"title": "Fabric Response for: NVDA holdings"},
+                }
+            ],
+        },
+    )
+
+    lane, agent_result, formatted_citations = module.run_agent_lane(
+        "foundry-iq",
+        "Which funds have the biggest NVIDIA positions?",
+        None,
+    )
+
+    assert lane["display_name"] == "Fabric IQ"
+    assert agent_result["answer"] == "Grounded Fabric-backed answer"
+    assert agent_result["route"] == "FABRIC_IQ"
+    assert formatted_citations == [
+        {
+            "source_type": "fabric_iq",
+            "identifier": "Fabric Response for: NVDA holdings",
+            "title": "Fabric Response for: NVDA holdings",
+            "content_preview": "Ranked funds from Fabric",
+            "score": 1.0,
+        }
+    ]
