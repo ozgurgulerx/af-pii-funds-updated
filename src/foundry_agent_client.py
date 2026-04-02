@@ -27,17 +27,21 @@ class FoundryAgentClient:
         *,
         base_url: str | None = None,
         project: str | None = None,
+        agent_version: str | None = None,
         display_name: str = "Foundry IQ",
         source_name: str | None = None,
         error_mode_hint: str = "Please try Code-based RAG mode instead.",
         require_explicit_config: bool = False,
         explicit_config_field_names: tuple[str, str, str] | None = None,
         allow_default_project_config: bool = True,
+        api_mode: str = "legacy_responses",
     ):
         self.agent_name = agent_name
         self.display_name = display_name
         self.source_name = source_name or agent_name
         self.error_mode_hint = error_mode_hint
+        self.api_mode = api_mode
+        self.agent_version = agent_version
 
         # Azure AI Foundry project configuration
         default_base_url = (
@@ -73,6 +77,12 @@ class FoundryAgentClient:
         # Use DefaultAzureCredential for flexibility (works with CLI, managed identity, etc.)
         self.credential = DefaultAzureCredential()
 
+    def _request_params(self) -> dict:
+        """Return request query params for the active API mode."""
+        if self.api_mode == "prompt_v1":
+            return {}
+        return {"api-version": self.api_version}
+
     def _get_token(self) -> str:
         """Get Azure AD token for AI Foundry API.
 
@@ -80,6 +90,24 @@ class FoundryAgentClient:
         """
         token = self.credential.get_token("https://ai.azure.com/.default")
         return token.token
+
+    def _post_response(self, url: str, headers: dict, body: dict, *, timeout: int = 120):
+        """Send a Responses API request for the active API mode."""
+        return requests.post(
+            url,
+            headers=headers,
+            json=body,
+            params=self._request_params(),
+            timeout=timeout,
+        )
+
+    def _should_retry_without_required_tool_choice(self, response, body: dict) -> bool:
+        """Retry prompt_v1 requests without tool_choice when Foundry rejects it."""
+        return (
+            self.api_mode == "prompt_v1"
+            and body.get("tool_choice") == "required"
+            and getattr(response, "status_code", None) == 400
+        )
 
     def _extract_response(self, data: dict) -> tuple:
         """Extract answer and citations from response data.
@@ -166,31 +194,44 @@ class FoundryAgentClient:
                 "error": True,
             }
 
-        url = f"{self.base_url}/api/projects/{self.project}/openai/responses"
+        if self.api_mode == "prompt_v1":
+            agent_reference = {"type": "agent_reference", "name": self.agent_name}
+            if self.agent_version:
+                agent_reference["version"] = str(self.agent_version)
+
+            url = f"{self.base_url}/api/projects/{self.project}/openai/v1/responses"
+            body = {
+                "agent_reference": agent_reference,
+                "tool_choice": "required",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": message,
+                    }
+                ],
+            }
+        else:
+            url = f"{self.base_url}/api/projects/{self.project}/openai/responses"
+            body = {
+                "agent": {"type": "agent_reference", "name": self.agent_name},
+                "input": message
+            }
+
+            # Include conversation ID for multi-turn conversations
+            if conversation_id:
+                body["conversation"] = conversation_id
 
         headers = {
             "Authorization": f"Bearer {self._get_token()}",
             "Content-Type": "application/json"
         }
 
-        body = {
-            "agent": {"type": "agent_reference", "name": self.agent_name},
-            "input": message
-        }
-
-        # Include conversation ID for multi-turn conversations
-        if conversation_id:
-            body["conversation"] = conversation_id
-
         try:
-            # Initial request - longer timeout for KB retrieval
-            response = requests.post(
-                url,
-                headers=headers,
-                json=body,
-                params={"api-version": self.api_version},
-                timeout=120
-            )
+            response = self._post_response(url, headers, body, timeout=120)
+            if not response.ok and self._should_retry_without_required_tool_choice(response, body):
+                fallback_body = dict(body)
+                fallback_body.pop("tool_choice", None)
+                response = self._post_response(url, headers, fallback_body, timeout=120)
 
             if not response.ok:
                 error_text = response.text
@@ -245,19 +286,23 @@ class FoundryAgentClient:
                     })
 
                 # Send approval and continue
-                approval_body = {
-                    "agent": {"type": "agent_reference", "name": self.agent_name},
-                    "input": approval_responses,
-                    "previous_response_id": response_id
-                }
+                if self.api_mode == "prompt_v1":
+                    agent_reference = {"type": "agent_reference", "name": self.agent_name}
+                    if self.agent_version:
+                        agent_reference["version"] = str(self.agent_version)
+                    approval_body = {
+                        "agent_reference": agent_reference,
+                        "input": approval_responses,
+                        "previous_response_id": response_id,
+                    }
+                else:
+                    approval_body = {
+                        "agent": {"type": "agent_reference", "name": self.agent_name},
+                        "input": approval_responses,
+                        "previous_response_id": response_id
+                    }
 
-                response = requests.post(
-                    url,
-                    headers=headers,
-                    json=approval_body,
-                    params={"api-version": self.api_version},
-                    timeout=120  # Longer timeout for KB retrieval
-                )
+                response = self._post_response(url, headers, approval_body, timeout=120)
 
                 if not response.ok:
                     error_text = response.text

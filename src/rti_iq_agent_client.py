@@ -20,6 +20,7 @@ class RTIIQAgentClient(FoundryAgentClient):
             agent_name=os.getenv("RTI_IQ_AGENT_NAME", ""),
             base_url=os.getenv("RTI_IQ_FOUNDRY_BASE_URL"),
             project=os.getenv("RTI_IQ_FOUNDRY_PROJECT"),
+            agent_version=os.getenv("RTI_IQ_AGENT_VERSION", ""),
             display_name="RTI / IQ",
             source_name="af-rti-iq-agent",
             error_mode_hint="Please check RTI / IQ configuration or use another retrieval mode.",
@@ -30,4 +31,5 @@ class RTIIQAgentClient(FoundryAgentClient):
                 "RTI_IQ_FOUNDRY_PROJECT",
             ),
             allow_default_project_config=False,
+            api_mode="prompt_v1",
         )

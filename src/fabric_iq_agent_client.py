@@ -20,6 +20,7 @@ class FabricIQAgentClient(FoundryAgentClient):
             agent_name=os.getenv("FABRIC_IQ_AGENT_NAME", ""),
             base_url=os.getenv("FABRIC_IQ_FOUNDRY_BASE_URL"),
             project=os.getenv("FABRIC_IQ_FOUNDRY_PROJECT"),
+            agent_version=os.getenv("FABRIC_IQ_AGENT_VERSION", "10"),
             display_name="Fabric IQ",
             source_name="af-fabric-iq-agent",
             error_mode_hint="Please check Fabric IQ configuration or use another retrieval mode.",
@@ -30,4 +31,5 @@ class FabricIQAgentClient(FoundryAgentClient):
                 "FABRIC_IQ_FOUNDRY_PROJECT",
             ),
             allow_default_project_config=False,
+            api_mode="prompt_v1",
         )
