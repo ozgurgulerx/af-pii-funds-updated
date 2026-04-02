@@ -13,6 +13,7 @@ on:
       - 'src/progress_emitter.py'
       - 'src/runtime_config.py'
       - 'src/fund_rag_agent.py'
+      - 'src/manual_ontology_client.py'
       - 'requirements.txt'
       - 'Dockerfile.backend'
       - '.dockerignore'
