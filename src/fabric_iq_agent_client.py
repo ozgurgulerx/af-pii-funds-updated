@@ -32,4 +32,5 @@ class FabricIQAgentClient(FoundryAgentClient):
             ),
             allow_default_project_config=False,
             api_mode="prompt_v1",
+            credential_env_prefix="FABRIC_IQ",
         )

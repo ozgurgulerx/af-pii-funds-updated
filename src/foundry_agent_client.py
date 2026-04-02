@@ -9,7 +9,7 @@ which provides access to the agent's configured knowledge base and instructions.
 
 import os
 import requests
-from azure.identity import DefaultAzureCredential
+from azure.identity import ClientSecretCredential, DefaultAzureCredential
 from runtime_config import load_local_env
 
 load_local_env()
@@ -35,6 +35,7 @@ class FoundryAgentClient:
         explicit_config_field_names: tuple[str, str, str] | None = None,
         allow_default_project_config: bool = True,
         api_mode: str = "legacy_responses",
+        credential_env_prefix: str | None = None,
     ):
         self.agent_name = agent_name
         self.display_name = display_name
@@ -42,6 +43,7 @@ class FoundryAgentClient:
         self.error_mode_hint = error_mode_hint
         self.api_mode = api_mode
         self.agent_version = agent_version
+        self.credential_env_prefix = credential_env_prefix
 
         # Azure AI Foundry project configuration
         default_base_url = (
@@ -74,8 +76,43 @@ class FoundryAgentClient:
                     f"Missing: {', '.join(missing_fields)}."
                 )
 
-        # Use DefaultAzureCredential for flexibility (works with CLI, managed identity, etc.)
-        self.credential = DefaultAzureCredential()
+        self.credential = self._build_credential()
+
+    def _prefixed_credential_field_names(self) -> dict[str, str] | None:
+        """Return the env vars used for a dedicated client-secret credential."""
+        if not self.credential_env_prefix:
+            return None
+        prefix = self.credential_env_prefix.rstrip("_")
+        return {
+            "tenant_id": f"{prefix}_AZURE_TENANT_ID",
+            "client_id": f"{prefix}_AZURE_CLIENT_ID",
+            "client_secret": f"{prefix}_AZURE_CLIENT_SECRET",
+        }
+
+    def _build_credential(self):
+        """Build the best available Azure credential for this client."""
+        env_fields = self._prefixed_credential_field_names()
+        if env_fields is None:
+            return DefaultAzureCredential()
+
+        env_values = {field: os.getenv(name) for field, name in env_fields.items()}
+        if not any(env_values.values()):
+            return DefaultAzureCredential()
+
+        missing_fields = [env_fields[field] for field, value in env_values.items() if not value]
+        if missing_fields:
+            if self.config_error is None:
+                self.config_error = (
+                    f"{self.display_name} credential configuration is incomplete. "
+                    f"Missing: {', '.join(missing_fields)}."
+                )
+            return DefaultAzureCredential()
+
+        return ClientSecretCredential(
+            tenant_id=env_values["tenant_id"],
+            client_id=env_values["client_id"],
+            client_secret=env_values["client_secret"],
+        )
 
     def _request_params(self) -> dict:
         """Return request query params for the active API mode."""
@@ -167,6 +204,49 @@ class FoundryAgentClient:
 
         return approval_ids
 
+    def _is_ungrounded_tool_failure_answer(self, answer: str, citations: list | None) -> bool:
+        """Detect agent prose that admits tool failure and then improvises an answer."""
+        if citations:
+            return False
+
+        normalized = (answer or "").lower()
+        if not normalized:
+            return False
+
+        access_failure_signals = [
+            "403 error",
+            "403 forbidden",
+            "having trouble accessing",
+            "can't access",
+            "cannot access",
+            "could not access",
+            "tool unavailable",
+            "retrieval tool",
+        ]
+        stale_fallback_signals = [
+            "previously pulled",
+            "i can still share the list",
+            "once the tool is available",
+            "when the tool is available",
+            "happy to retry",
+        ]
+
+        return (
+            any(signal in normalized for signal in access_failure_signals)
+            and any(signal in normalized for signal in stale_fallback_signals)
+        )
+
+    def _build_grounding_failure_result(self) -> dict:
+        return {
+            "answer": (
+                f"{self.display_name} could not access grounded retrieval tools for this question. "
+                f"{self.error_mode_hint}"
+            ),
+            "agent": self.agent_name,
+            "citations": [],
+            "error": True,
+        }
+
     def chat(self, message: str, conversation_id: str = None) -> dict:
         """
         Send a message to the Foundry IQ agent using the Responses API.
@@ -249,6 +329,8 @@ class FoundryAgentClient:
             # Check if we have a final message already
             answer, citations, has_final = self._extract_response(data)
             if has_final and answer:
+                if self._is_ungrounded_tool_failure_answer(answer, citations):
+                    return self._build_grounding_failure_result()
                 return {
                     "answer": answer,
                     "agent": self.agent_name,
@@ -265,6 +347,8 @@ class FoundryAgentClient:
                     # No more approvals needed, check for final message
                     answer, citations, has_final = self._extract_response(data)
                     if has_final and answer:
+                        if self._is_ungrounded_tool_failure_answer(answer, citations):
+                            return self._build_grounding_failure_result()
                         return {
                             "answer": answer,
                             "agent": self.agent_name,

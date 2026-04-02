@@ -113,6 +113,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [queryProgress, setQueryProgress] = useState<ToolTraceStep[]>([]);
+  const [querySourcesUsed, setQuerySourcesUsed] = useState<string[]>([]);
   const [activeRightTab, setActiveRightTab] = useState<RightRailTab>("evidence");
   const [showFollowUps, setShowFollowUps] = useState(true);
 
@@ -164,6 +165,7 @@ export default function ChatPage() {
     setShowFollowUps(true);
     setStreamingContent("");
     setQueryProgress([]);
+    setQuerySourcesUsed([]);
     pendingEvidenceTabRef.current = false;
     rightTabManualRef.current = false;
     setActiveRightTab("evidence");
@@ -172,13 +174,16 @@ export default function ChatPage() {
   }, [getUniqueCitationsFromMessages]);
 
   const normalizeCitations = useCallback((existing: Citation[], incoming: Citation[]) => {
-    const knownByRowId = new Map(existing.map((citation) => [citation.rowId, citation]));
-    const seenRowIds = new Set(existing.map((citation) => citation.rowId));
+    const citationKey = (citation: Pick<Citation, "provider" | "rowId">) =>
+      `${citation.provider}::${citation.rowId}`;
+    const knownByKey = new Map(existing.map((citation) => [citationKey(citation), citation]));
+    const seenKeys = new Set(existing.map((citation) => citationKey(citation)));
     let nextCitationId = existing.reduce((maxId, citation) => Math.max(maxId, citation.id), 0) + 1;
     const appendedCitations: Citation[] = [];
 
     const messageCitations = incoming.map((citation) => {
-      const existingCitation = knownByRowId.get(citation.rowId);
+      const key = citationKey(citation);
+      const existingCitation = knownByKey.get(key);
       if (existingCitation) {
         return existingCitation;
       }
@@ -188,10 +193,10 @@ export default function ChatPage() {
         id: nextCitationId++,
       };
 
-      knownByRowId.set(citation.rowId, normalizedCitation);
+      knownByKey.set(key, normalizedCitation);
 
-      if (!seenRowIds.has(citation.rowId)) {
-        seenRowIds.add(citation.rowId);
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
         appendedCitations.push(normalizedCitation);
       }
 
@@ -199,6 +204,27 @@ export default function ChatPage() {
     });
 
     return { messageCitations, appendedCitations };
+  }, []);
+
+  const sanitizeIncomingCitations = useCallback((incoming: unknown): Citation[] => {
+    if (!Array.isArray(incoming)) return [];
+
+    return incoming
+      .filter((citation): citation is Citation => {
+        if (!citation || typeof citation !== "object") return false;
+        const value = citation as Record<string, unknown>;
+        return (
+          typeof value.provider === "string"
+          && typeof value.dataset === "string"
+          && typeof value.rowId === "string"
+          && typeof value.timestamp === "string"
+          && typeof value.confidence === "number"
+        );
+      })
+      .map((citation) => ({
+        ...citation,
+        excerpt: typeof citation.excerpt === "string" ? citation.excerpt : undefined,
+      }));
   }, []);
 
   const handleNewChat = useCallback(() => {
@@ -211,6 +237,7 @@ export default function ChatPage() {
     setShowFollowUps(false);
     setStreamingContent("");
     setQueryProgress([]);
+    setQuerySourcesUsed([]);
     pendingEvidenceTabRef.current = false;
     rightTabManualRef.current = false;
     setActiveRightTab("evidence");
@@ -265,6 +292,7 @@ export default function ChatPage() {
     setIsLoading(true);
     setStreamingContent("");
     setQueryProgress([]);
+    setQuerySourcesUsed([]);
     setShowFollowUps(false);
     setMobileSidebarOpen(false);
     pendingEvidenceTabRef.current = false;
@@ -335,6 +363,7 @@ export default function ChatPage() {
                   sourcesUsed = Array.isArray(data.sourcesUsed)
                     ? data.sourcesUsed.filter((value: unknown): value is string => typeof value === "string")
                     : [];
+                  setQuerySourcesUsed(sourcesUsed);
                   artifacts = Array.isArray(data.artifacts)
                     ? data.artifacts.filter((artifact: unknown): artifact is Artifact => {
                         if (!artifact || typeof artifact !== "object") return false;
@@ -375,8 +404,8 @@ export default function ChatPage() {
                   setStreamingContent(fullContent);
                   break;
                 case "citations":
-                  nextCitations = data.citations;
-                  pendingEvidenceTabRef.current = Array.isArray(data.citations) && data.citations.length > 0;
+                  nextCitations = sanitizeIncomingCitations(data.citations);
+                  pendingEvidenceTabRef.current = nextCitations.length > 0;
                   break;
                 case "done":
                   isVerified = data.isVerified;
@@ -402,11 +431,15 @@ export default function ChatPage() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === "done") isVerified = data.isVerified;
-            if (data.type === "citations") nextCitations = data.citations;
+            if (data.type === "citations") {
+              nextCitations = sanitizeIncomingCitations(data.citations);
+              pendingEvidenceTabRef.current = nextCitations.length > 0;
+            }
             if (data.type === "metadata") {
               sourcesUsed = Array.isArray(data.sourcesUsed)
                 ? data.sourcesUsed.filter((value: unknown): value is string => typeof value === "string")
                 : [];
+              setQuerySourcesUsed(sourcesUsed);
               artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
               route = typeof data.route === "string" ? data.route : undefined;
               routeConfidence = typeof data.routeConfidence === "number" ? data.routeConfidence : undefined;
@@ -451,8 +484,10 @@ export default function ChatPage() {
 
       if (appendedCitations.length > 0) {
         setCitations((previous) => {
-          const existingRowIds = new Set(previous.map((citation) => citation.rowId));
-          const uniqueNew = appendedCitations.filter((citation) => !existingRowIds.has(citation.rowId));
+          const existingKeys = new Set(previous.map((citation) => `${citation.provider}::${citation.rowId}`));
+          const uniqueNew = appendedCitations.filter(
+            (citation) => !existingKeys.has(`${citation.provider}::${citation.rowId}`)
+          );
           return uniqueNew.length > 0 ? [...previous, ...uniqueNew] : previous;
         });
       }
@@ -475,8 +510,9 @@ export default function ChatPage() {
       setIsLoading(false);
       setStreamingContent("");
       setQueryProgress([]);
+      setQuerySourcesUsed([]);
     }
-  }, [citations, compactHero, messages, normalizeCitations, retrievalMode]);
+  }, [citations, compactHero, messages, normalizeCitations, retrievalMode, sanitizeIncomingCitations]);
 
   const handleHeroProfileSelect = useCallback((query: string) => {
     if (isLoading) return;
@@ -562,6 +598,10 @@ export default function ChatPage() {
     () => [...messages].reverse().find((message) => message.role === "assistant" && (message.toolTrace?.length ?? 0) > 0)?.toolTrace ?? [],
     [messages]
   );
+  const latestAssistantSourcesUsed = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant" && (message.sourcesUsed?.length ?? 0) > 0)?.sourcesUsed ?? [],
+    [messages]
+  );
 
   const retrievalModeOptions = useMemo(
     () => [
@@ -574,6 +614,7 @@ export default function ChatPage() {
   );
 
   const rightRailToolTrace = isLoading && queryProgress.length > 0 ? queryProgress : latestAssistantTrace;
+  const rightRailSourcesUsed = isLoading && querySourcesUsed.length > 0 ? querySourcesUsed : latestAssistantSourcesUsed;
 
   const heroIntroMotion = !hasPlayedHeroEntry && !prefersReducedMotion;
   const heroCompactLead = marketView.supportPoints[0] || marketView.comment;
@@ -885,6 +926,8 @@ export default function ChatPage() {
         isCollapsed={sourcesPanelCollapsed}
         onToggle={() => setSourcesPanelCollapsed((previous) => !previous)}
         citations={citations}
+        sourcesUsed={rightRailSourcesUsed}
+        isStreaming={isLoading}
         toolTrace={rightRailToolTrace}
         activeTab={activeRightTab}
         onTabChange={handleRightTabChange}

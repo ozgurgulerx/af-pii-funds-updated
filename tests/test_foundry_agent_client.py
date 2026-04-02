@@ -20,10 +20,15 @@ def load_foundry_agent_client_module(monkeypatch):
     fake_identity = types.ModuleType("azure.identity")
 
     class DummyCredential:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
         def get_token(self, _scope):
             return types.SimpleNamespace(token="test-token")
 
     fake_identity.DefaultAzureCredential = DummyCredential
+    fake_identity.ClientSecretCredential = DummyCredential
     fake_azure.identity = fake_identity
 
     monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
@@ -165,3 +170,96 @@ def test_prompt_v1_chat_retries_without_required_tool_choice_after_bad_request(m
     assert captured_requests[0]["json"]["tool_choice"] == "required"
     assert "tool_choice" not in captured_requests[1]["json"]
     assert result["answer"] == "retry-ok"
+
+
+def test_uses_prefixed_client_secret_credential_when_foundry_env_vars_are_present(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    monkeypatch.setenv("FABRIC_IQ_AZURE_TENANT_ID", "tenant-123")
+    monkeypatch.setenv("FABRIC_IQ_AZURE_CLIENT_ID", "client-123")
+    monkeypatch.setenv("FABRIC_IQ_AZURE_CLIENT_SECRET", "secret-123")
+
+    client = module.FoundryAgentClient(
+        agent_name="af-funds-fabric-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        api_mode="prompt_v1",
+        display_name="Fabric IQ",
+        allow_default_project_config=False,
+        credential_env_prefix="FABRIC_IQ",
+    )
+
+    assert client.credential.kwargs == {
+        "tenant_id": "tenant-123",
+        "client_id": "client-123",
+        "client_secret": "secret-123",
+    }
+    assert client.config_error is None
+
+
+def test_prefixed_foundry_credential_requires_all_secret_fields(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    monkeypatch.setenv("FABRIC_IQ_AZURE_TENANT_ID", "tenant-123")
+    monkeypatch.setenv("FABRIC_IQ_AZURE_CLIENT_ID", "client-123")
+    monkeypatch.delenv("FABRIC_IQ_AZURE_CLIENT_SECRET", raising=False)
+
+    client = module.FoundryAgentClient(
+        agent_name="af-funds-fabric-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        api_mode="prompt_v1",
+        display_name="Fabric IQ",
+        allow_default_project_config=False,
+        credential_env_prefix="FABRIC_IQ",
+    )
+
+    assert client.config_error == (
+        "Fabric IQ credential configuration is incomplete. "
+        "Missing: FABRIC_IQ_AZURE_CLIENT_SECRET."
+    )
+
+
+def test_chat_rejects_ungrounded_tool_failure_answer(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_degraded",
+                "conversation": "conv_degraded",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "I’m having trouble accessing the live N-PORT retrieval tool right now "
+                                    "(403 error). I can still share the list I previously pulled and retry "
+                                    "once the tool is available."
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "previously pulled" not in result["answer"]

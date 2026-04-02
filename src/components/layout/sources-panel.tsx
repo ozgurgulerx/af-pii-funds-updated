@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDateTime } from "@/lib/utils";
+import { localizeSourceLabel } from "@/lib/tool-trace";
 import { ToolTraceTab } from "@/components/evidence/tool-trace-tab";
 import type { Citation, ToolTraceStep } from "@/types";
 
@@ -23,6 +24,8 @@ interface SourcesPanelProps {
   isCollapsed: boolean;
   onToggle: () => void;
   citations: Citation[];
+  sourcesUsed?: string[];
+  isStreaming?: boolean;
   toolTrace?: ToolTraceStep[];
   activeTab?: RightRailTab;
   onTabChange?: (tab: RightRailTab) => void;
@@ -36,6 +39,8 @@ function SourcesPanelBody({
   isCollapsed,
   onToggle,
   citations,
+  sourcesUsed = [],
+  isStreaming = false,
   toolTrace = [],
   activeTab = "evidence",
   onTabChange,
@@ -46,6 +51,11 @@ function SourcesPanelBody({
 }: Omit<SourcesPanelProps, "mobileOpen"> & { mobile?: boolean }) {
   const showCollapsed = !mobile && isCollapsed;
   const activeCitation = citations.find((citation) => citation.id === activeCitationId) ?? null;
+  const uniqueSourcesUsed = [...new Set(sourcesUsed.filter(Boolean))];
+  const evidenceSourceCount = new Set([
+    ...uniqueSourcesUsed,
+    ...citations.map((citation) => citation.provider).filter(Boolean),
+  ]).size;
   const focusedCount = activeTab === "tooltrace" ? toolTrace.length : (activeCitation ? activeCitation.id : 0);
 
   return (
@@ -84,7 +94,7 @@ function SourcesPanelBody({
             <div className="mt-1 font-display text-lg font-semibold">
               {activeTab === "tooltrace"
                 ? toolTrace.length
-                : new Set(citations.map((citation) => citation.provider)).size}
+                : evidenceSourceCount}
             </div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-background/75 px-3 py-2">
@@ -142,7 +152,7 @@ function SourcesPanelBody({
           </div>
         ) : activeTab === "tooltrace" ? (
           <ToolTraceTab steps={toolTrace} />
-        ) : citations.length === 0 ? (
+        ) : citations.length === 0 && uniqueSourcesUsed.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-border/80 bg-background/70 px-4 py-8 text-center">
             <MenuSquare className="mx-auto h-8 w-8 text-muted-foreground/55" />
             <p className="mt-3 text-sm font-medium text-foreground">No evidence yet</p>
@@ -150,6 +160,26 @@ function SourcesPanelBody({
           </div>
         ) : (
           <div className="space-y-3">
+            {uniqueSourcesUsed.length > 0 && (
+              <div className="rounded-[24px] border border-border/75 bg-background/78 px-4 py-3 shadow-subtle">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {isStreaming ? "Active sources" : "Sources used"}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {uniqueSourcesUsed.map((source) => (
+                    <Badge key={source} variant="outline" className="bg-background/80">
+                      {localizeSourceLabel(source)}
+                    </Badge>
+                  ))}
+                </div>
+                {isStreaming && citations.length === 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Waiting for cited rows from the active retrieval path.
+                  </p>
+                )}
+              </div>
+            )}
+
             {activeCitation && (
               <div className="rounded-[24px] border border-primary/20 bg-primary/[0.05] px-4 py-3 shadow-subtle">
                 <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/70">

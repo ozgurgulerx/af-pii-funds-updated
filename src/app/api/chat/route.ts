@@ -39,6 +39,8 @@ type BackendResponse = {
   route_reasoning?: string;
 };
 
+type RawCitationRecord = Record<string, unknown>;
+
 function createSSEMessage(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
@@ -136,6 +138,46 @@ function mapCitationDataset(sourceType: string): string {
     default:
       return sourceType || "unknown";
   }
+}
+
+function normalizeCitationRecord(citation: unknown, idx: number): Citation | null {
+  if (!citation || typeof citation !== "object") return null;
+
+  const value = citation as RawCitationRecord;
+
+  if (typeof value.provider === "string" && typeof value.rowId === "string") {
+    return {
+      id: typeof value.id === "number" ? value.id : idx + 1,
+      provider: value.provider,
+      dataset: typeof value.dataset === "string" ? value.dataset : mapCitationDataset(value.provider),
+      rowId: value.rowId,
+      timestamp: typeof value.timestamp === "string" ? value.timestamp : new Date().toISOString(),
+      confidence: typeof value.confidence === "number" ? value.confidence : 0.9,
+      excerpt: typeof value.excerpt === "string" ? value.excerpt : undefined,
+    };
+  }
+
+  if (typeof value.source_type === "string" && typeof value.identifier === "string") {
+    return {
+      id: idx + 1,
+      provider: value.source_type,
+      dataset: mapCitationDataset(value.source_type),
+      rowId: value.identifier,
+      timestamp: new Date().toISOString(),
+      confidence: typeof value.score === "number" ? value.score : 0.9,
+      excerpt: typeof value.content_preview === "string" ? value.content_preview : undefined,
+    };
+  }
+
+  return null;
+}
+
+function normalizeCitationList(citations: unknown): Citation[] {
+  if (!Array.isArray(citations)) return [];
+
+  return citations
+    .map((citation, idx) => normalizeCitationRecord(citation, idx))
+    .filter((citation): citation is Citation => Boolean(citation));
 }
 
 function normalizeTraceSteps(
@@ -315,15 +357,7 @@ async function streamResultToClient(
   }
 
   if (data.citations && data.citations.length > 0) {
-    const formattedCitations: Citation[] = data.citations.map((citation, idx) => ({
-      id: idx + 1,
-      provider: citation.source_type,
-      dataset: mapCitationDataset(citation.source_type),
-      rowId: citation.identifier,
-      timestamp: new Date().toISOString(),
-      confidence: citation.score || 0.9,
-      excerpt: citation.content_preview,
-    }));
+    const formattedCitations = normalizeCitationList(data.citations);
 
     controller.enqueue(
       encoder.encode(
@@ -345,6 +379,26 @@ async function streamResultToClient(
   );
 }
 
+function transformBackendSSEFrame(frame: string): string {
+  const outboundLines = frame.split("\n").map((line) => {
+    if (!line.startsWith("data: ")) return line;
+
+    try {
+      const payload = JSON.parse(line.slice(6)) as Record<string, unknown>;
+      if (payload.type !== "citations") return line;
+
+      return `data: ${JSON.stringify({
+        ...payload,
+        citations: normalizeCitationList(payload.citations),
+      })}`;
+    } catch {
+      return line;
+    }
+  });
+
+  return `${outboundLines.join("\n")}\n\n`;
+}
+
 async function pipeBackendStream(
   response: Response,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -354,11 +408,26 @@ async function pipeBackendStream(
     throw new Error("Streaming backend returned no body");
   }
 
+  const decoder = new TextDecoder();
+  let buffer = "";
+
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value) controller.enqueue(value);
+      if (!value) continue;
+
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+
+      for (const frame of frames) {
+        controller.enqueue(encoder.encode(transformBackendSSEFrame(frame)));
+      }
+    }
+
+    if (buffer.trim()) {
+      controller.enqueue(encoder.encode(transformBackendSSEFrame(buffer)));
     }
   } finally {
     reader.releaseLock();

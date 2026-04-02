@@ -40,8 +40,21 @@ const ROUTE_LABELS: Record<string, string> = {
   RTI_IQ: "RTI / IQ",
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+  SQL: "SQL",
+  SEMANTIC: "Semantic Search",
+  RAPTOR: "Macro Reports",
+  foundry_iq: "Foundry IQ",
+  fabric_iq: "Fabric IQ",
+  rti_iq: "RTI / IQ",
+};
+
 export function localizeRouteLabel(route: string): string {
   return ROUTE_LABELS[route] ?? route;
+}
+
+export function localizeSourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
 }
 
 export function localizeToolName(toolName: string): string {
