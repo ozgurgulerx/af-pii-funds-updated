@@ -37,6 +37,7 @@ class FoundryAgentClient:
         api_mode: str = "legacy_responses",
         credential_env_prefix: str | None = None,
         tool_user_error_fallback_message: str | None = None,
+        request_timeout_seconds: int = 45,
     ):
         self.agent_name = agent_name
         self.display_name = display_name
@@ -46,6 +47,7 @@ class FoundryAgentClient:
         self.agent_version = agent_version
         self.credential_env_prefix = credential_env_prefix
         self.tool_user_error_fallback_message = tool_user_error_fallback_message
+        self.request_timeout_seconds = request_timeout_seconds
 
         # Azure AI Foundry project configuration
         default_base_url = (
@@ -365,16 +367,16 @@ class FoundryAgentClient:
         }
 
         try:
-            response = self._post_response(url, headers, body, timeout=120)
+            response = self._post_response(url, headers, body, timeout=self.request_timeout_seconds)
             if not response.ok and self._should_retry_without_required_tool_choice(response, body):
                 fallback_body = dict(body)
                 fallback_body.pop("tool_choice", None)
-                response = self._post_response(url, headers, fallback_body, timeout=120)
+                response = self._post_response(url, headers, fallback_body, timeout=self.request_timeout_seconds)
                 body = fallback_body
 
             if not response.ok and self._should_retry_with_tool_user_error_fallback(response, body):
                 fallback_body = self._build_tool_user_error_fallback_body(body)
-                response = self._post_response(url, headers, fallback_body, timeout=120)
+                response = self._post_response(url, headers, fallback_body, timeout=self.request_timeout_seconds)
                 body = fallback_body
 
             if not response.ok:
@@ -450,7 +452,7 @@ class FoundryAgentClient:
                         "previous_response_id": response_id
                     }
 
-                response = self._post_response(url, headers, approval_body, timeout=120)
+                response = self._post_response(url, headers, approval_body, timeout=self.request_timeout_seconds)
 
                 if not response.ok:
                     error_text = response.text
