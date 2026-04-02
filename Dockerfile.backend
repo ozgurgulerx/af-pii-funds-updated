@@ -28,6 +28,7 @@ COPY src/sql_generator.py .
 COPY src/pii_filter.py .
 COPY src/foundry_agent_client.py .
 COPY src/fabric_iq_agent_client.py .
+COPY src/manual_ontology_client.py .
 COPY src/rti_iq_agent_client.py .
 COPY src/progress_emitter.py .
 COPY src/runtime_config.py .
