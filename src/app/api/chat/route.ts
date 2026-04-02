@@ -14,6 +14,7 @@ const RequestSchema = z.object({
 
 const PYTHON_API_URL = process.env.BACKEND_URL || process.env.PYTHON_API_URL || "http://localhost:5001";
 const encoder = new TextEncoder();
+const SYNTHETIC_PROGRESS_FRAME_DELAY_MS = 90;
 
 type RetrievalMode = "code-rag" | "foundry-iq" | "fabric-iq" | "rti-iq";
 
@@ -294,6 +295,8 @@ async function streamResultToClient(
           }),
         ),
       );
+      // Keep fallback-only synthetic running states visible long enough to render.
+      await new Promise((resolve) => setTimeout(resolve, SYNTHETIC_PROGRESS_FRAME_DELAY_MS));
     }
 
     controller.enqueue(encoder.encode(createSSEMessage({ type: "progress", step })));

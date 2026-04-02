@@ -89,6 +89,7 @@ export default function ChatPage() {
   const prefersReducedMotion = useReducedMotion();
   const requestInFlightRef = useRef(false);
   const rightTabManualRef = useRef(false);
+  const pendingEvidenceTabRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -163,6 +164,7 @@ export default function ChatPage() {
     setShowFollowUps(true);
     setStreamingContent("");
     setQueryProgress([]);
+    pendingEvidenceTabRef.current = false;
     rightTabManualRef.current = false;
     setActiveRightTab("evidence");
     setMobileSidebarOpen(false);
@@ -209,6 +211,7 @@ export default function ChatPage() {
     setShowFollowUps(false);
     setStreamingContent("");
     setQueryProgress([]);
+    pendingEvidenceTabRef.current = false;
     rightTabManualRef.current = false;
     setActiveRightTab("evidence");
     setMobileSidebarOpen(false);
@@ -264,6 +267,7 @@ export default function ChatPage() {
     setQueryProgress([]);
     setShowFollowUps(false);
     setMobileSidebarOpen(false);
+    pendingEvidenceTabRef.current = false;
     rightTabManualRef.current = false;
     setActiveRightTab("tooltrace");
     compactHero();
@@ -372,12 +376,13 @@ export default function ChatPage() {
                   break;
                 case "citations":
                   nextCitations = data.citations;
-                  if (!rightTabManualRef.current) {
-                    setActiveRightTab("evidence");
-                  }
+                  pendingEvidenceTabRef.current = Array.isArray(data.citations) && data.citations.length > 0;
                   break;
                 case "done":
                   isVerified = data.isVerified;
+                  if (!rightTabManualRef.current && pendingEvidenceTabRef.current) {
+                    setActiveRightTab("evidence");
+                  }
                   break;
                 case "error":
                   throw new Error(data.message);
