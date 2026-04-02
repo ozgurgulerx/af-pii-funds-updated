@@ -44,7 +44,7 @@ report_ending_period, report_date, is_last_filing
 Individual security positions held by each fund.
 Columns: accession_number (FK), holding_id, issuer_name, issuer_lei, issuer_title,
 issuer_cusip, balance, unit, currency_code, currency_value, exchange_rate,
-percentage (decimal 0-1, multiply by 100 for %), payoff_profile,
+percentage (already stored in percent units, e.g. 5.53 = 5.53%), payoff_profile,
 asset_cat (EC=equity, DBT=debt, ABS-MBS=mortgage-backed, etc.),
 issuer_type, investment_country, is_restricted_security, fair_value_level, derivative_cat
 Primary Key: (accession_number, holding_id)
@@ -161,7 +161,7 @@ Generate SQLite-compatible SQL queries based on natural language questions.
 1. Return ONLY the SQL query, no explanations
 2. Always include fund name (series_name) and manager (registrant_name) when relevant
 3. Use CAST(column AS REAL) for numeric comparisons on TEXT columns
-4. Percentage column is decimal (0.05 = 5%), multiply by 100 for display
+4. Percentage column is already stored in percent units (5.53 = 5.53%), do not multiply by 100
 5. Use proper JOINs based on the key relationships
 6. Limit results to 20 unless user specifies otherwise
 7. For "top N" queries, use ORDER BY and LIMIT
@@ -178,7 +178,7 @@ ORDER BY CAST(f.total_assets AS REAL) DESC
 LIMIT 5
 
 Q: "Funds holding Apple stock"
-SELECT f.series_name, r.registrant_name, h.issuer_name, CAST(h.percentage AS REAL)*100 as pct
+SELECT f.series_name, r.registrant_name, h.issuer_name, CAST(h.percentage AS REAL) as pct
 FROM fund_reported_holding h
 JOIN fund_reported_info f USING (accession_number)
 JOIN registrant r USING (accession_number)
@@ -259,6 +259,20 @@ class SQLGenerator:
         sql = re.sub(r'```sql\n?', '', sql)
         sql = re.sub(r'```\n?', '', sql)
         sql = sql.strip()
+
+        # Guardrail: SEC holding percentages are already stored in percent units.
+        sql = re.sub(
+            r'CAST\(([\w.]*percentage)\s+AS\s+REAL\)\s*\*\s*100\b',
+            r'CAST(\1 AS REAL)',
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r'\b100\s*\*\s*CAST\(([\w.]*percentage)\s+AS\s+REAL\)',
+            r'CAST(\1 AS REAL)',
+            sql,
+            flags=re.IGNORECASE,
+        )
 
         return sql
 

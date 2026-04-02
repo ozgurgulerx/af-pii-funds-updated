@@ -120,7 +120,7 @@ Available tables:
 - fund_reported_info: accession_number, series_name, total_assets, net_assets
 - registrant: accession_number, registrant_name, cik
 - fund_reported_holding: accession_number, holding_id, issuer_name, issuer_cusip,
-  percentage (decimal 0-1), currency_value, asset_cat (EC=equity, DBT=debt, ABS-MBS=mortgage-backed)
+  percentage (already stored in percent units), currency_value, asset_cat (EC=equity, DBT=debt, ABS-MBS=mortgage-backed)
 - debt_security: holding_id, maturity_date, coupon_type, annualized_rate
 - monthly_total_return: accession_number, monthly_total_return1/2/3
 
@@ -130,7 +130,7 @@ Common joins:
 
 Notes:
 - total_assets and percentage are stored as TEXT, use CAST(x AS REAL) for numeric operations
-- percentage is decimal (0.05 = 5%), multiply by 100 for display
+- percentage is already stored in percent units (5.53 = 5.53%), do not multiply by 100
 """
 
         system_prompt = f"""You are a SQL expert. Generate SQLite-compatible SQL for the user's question.
@@ -141,7 +141,7 @@ Rules:
 - Always include fund name (series_name) and manager (registrant_name) in results
 - Use CAST(total_assets AS REAL) for numeric comparisons
 - Limit results to 20 unless user specifies otherwise
-- For holdings, multiply percentage by 100 for display"""
+- For holdings, use percentage as-is for display"""
 
         response = self.llm.chat.completions.create(
             model=LLM_DEPLOYMENT,
@@ -155,7 +155,22 @@ Rules:
         # Clean up SQL (remove markdown code blocks if present)
         sql = re.sub(r'```sql\n?', '', sql)
         sql = re.sub(r'```\n?', '', sql)
-        return sql.strip()
+        sql = sql.strip()
+
+        # Guardrail: SEC holding percentages are already stored in percent units.
+        sql = re.sub(
+            r'CAST\(([\w.]*percentage)\s+AS\s+REAL\)\s*\*\s*100\b',
+            r'CAST(\1 AS REAL)',
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r'\b100\s*\*\s*CAST\(([\w.]*percentage)\s+AS\s+REAL\)',
+            r'CAST(\1 AS REAL)',
+            sql,
+            flags=re.IGNORECASE,
+        )
+        return sql
 
     def execute_sql(self, sql: str) -> list:
         """Execute SQL and return results"""
