@@ -33,6 +33,7 @@ class FabricIQAgentClient(FoundryAgentClient):
             allow_default_project_config=False,
             api_mode="prompt_v1",
             credential_env_prefix="FABRIC_IQ",
+            request_timeout_seconds=150,
             tool_user_error_fallback_message=(
                 "The Microsoft Fabric data agent tool is unavailable in this runtime. "
                 "Do not use the Fabric data agent for this request. "
