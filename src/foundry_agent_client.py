@@ -275,6 +275,7 @@ class FoundryAgentClient:
             "tool error",
             "service error",
             "internal error",
+            "error retrieving",
             "having trouble accessing",
             "unable to access",
             "unable to reach",
@@ -285,45 +286,13 @@ class FoundryAgentClient:
             "could not retrieve",
             "failed to retrieve",
             "retrieve the source",
+            "fund database",
             "holdings database",
             "database is failing right now",
             "tool unavailable",
             "retrieval tool",
         ]
-        stale_fallback_signals = [
-            "previously pulled",
-            "i can still share the list",
-            "i can retry",
-            "retry and return",
-            "official list with citations",
-            "authoritative list",
-            "proper citation",
-            "quick question to make results most useful",
-            "which option do you want me to fetch",
-            "which do you prefer",
-            "which would you prefer",
-            "would you like me to",
-            "once the tool is available",
-            "when the tool is available",
-            "for now",
-            "happy to retry",
-            "quick (unsourced) summary",
-            "unsourced summary",
-            "sourced-agnostic summary",
-            "sourced-free overview",
-            "best-effort",
-            "estimated",
-            "no official",
-            "due to access issue",
-            "clarifying questions",
-            "non-authoritative",
-            "non-filed summary",
-        ]
-
-        return (
-            any(signal in normalized for signal in access_failure_signals)
-            and any(signal in normalized for signal in stale_fallback_signals)
-        )
+        return any(signal in normalized for signal in access_failure_signals)
 
     def _build_grounding_failure_result(self) -> dict:
         return {

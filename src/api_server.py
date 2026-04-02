@@ -113,6 +113,70 @@ def format_agent_citations(
     return formatted_citations
 
 
+def format_retriever_citations(result) -> list[dict]:
+    return [
+        {
+            "source_type": citation.source_type,
+            "identifier": citation.identifier,
+            "title": citation.title,
+            "content_preview": citation.content_preview,
+            "score": citation.score,
+        }
+        for citation in result.citations
+    ]
+
+
+def map_route_to_retrieval_display_name(route: str, sql_query: str | None = None) -> str:
+    if route == "SQL":
+        return "PostgreSQL (SQL Query)"
+    if route == "SEMANTIC":
+        return "Azure AI Search (Semantic)"
+    if route == "RAPTOR":
+        return "Azure AI Search (Macro Reports)"
+    if route == "SEMANTIC_RAPTOR":
+        return "Azure AI Search (Semantic + Macro)"
+    if route == "HYBRID":
+        return "Azure AI Search (Hybrid)"
+    if route == "CHAIN":
+        return "Chain (Market → Fund)"
+    return "PostgreSQL (SQL Query)" if sql_query else "Code-based RAG"
+
+
+def infer_sources_used(formatted_citations: list[dict], default_source_type: str | None = None) -> list[str]:
+    ordered_sources: list[str] = []
+    for citation in formatted_citations:
+        source_type = citation.get("source_type")
+        if isinstance(source_type, str) and source_type and source_type not in ordered_sources:
+            ordered_sources.append(source_type)
+    if ordered_sources:
+        return ordered_sources
+    if default_source_type:
+        return [default_source_type]
+    return []
+
+
+def build_code_rag_fallback_result(result, *, failed_lane_name: str) -> tuple[dict, list[dict]]:
+    formatted_citations = format_retriever_citations(result)
+    route = result.route
+    reasoning = f"{failed_lane_name} fallback to {route}: {result.reasoning}"
+    answer_payload = {
+        "answer": result.answer,
+        "agent": "code-rag-fallback",
+        "citations": formatted_citations,
+        "conversation_id": None,
+        "route": route,
+        "reasoning": reasoning,
+        "route_reasoning": reasoning,
+        "sql_query": result.sql_query,
+        "error": False,
+        "fallback_origin": "code-rag",
+        "retrieval_display_name": map_route_to_retrieval_display_name(route, result.sql_query),
+        "retrieval_output_summary": f"fallback to {route} with {len(formatted_citations)} citation(s)",
+        "sources_used": infer_sources_used(formatted_citations),
+    }
+    return answer_payload, formatted_citations
+
+
 def get_agent_lane_config(retrieval_mode: str) -> dict | None:
     lane_configs = {
         "foundry-iq": {
@@ -143,7 +207,13 @@ def get_agent_lane_config(retrieval_mode: str) -> dict | None:
     return lane_configs.get(retrieval_mode)
 
 
-def run_agent_lane(retrieval_mode: str, backend_query: str, conversation_id: str | None) -> tuple[dict, dict, list[dict]]:
+def run_agent_lane(
+    retrieval_mode: str,
+    backend_query: str,
+    conversation_id: str | None,
+    *,
+    use_llm_routing: bool = True,
+) -> tuple[dict, dict, list[dict]]:
     lane = get_agent_lane_config(retrieval_mode)
     if lane is None:
         raise ValueError(f"Unsupported agent retrieval mode {retrieval_mode!r}")
@@ -156,25 +226,47 @@ def run_agent_lane(retrieval_mode: str, backend_query: str, conversation_id: str
     ):
         fabric_result = fabric_iq_client.chat(backend_query, conversation_id=conversation_id)
         if not fabric_result.get("error"):
+            fabric_lane = get_agent_lane_config("fabric-iq")
+            if fabric_lane is not None:
+                lane = fabric_lane
+            fabric_result["route"] = lane["route"]
+            fabric_result["route_reasoning"] = "Recovered through Fabric IQ after Foundry IQ failed."
+            fabric_result["retrieval_display_name"] = lane["display_name"]
+            fabric_result["sources_used"] = [lane["source_type"]]
             agent_result = fabric_result
+        else:
+            agent_result, formatted_citations = build_code_rag_fallback_result(
+                retriever.answer(backend_query, use_llm_routing=use_llm_routing),
+                failed_lane_name=lane["display_name"],
+            )
+            return lane, agent_result, formatted_citations
 
     formatted_citations = format_agent_citations(
         agent_result.get("citations", []),
         source_type=lane["source_type"],
         default_title=lane["default_title"],
     )
+    agent_result.setdefault("route", lane["route"])
+    agent_result.setdefault("route_reasoning", f"Using {lane['display_name']} agent ({agent_result.get('agent', 'unknown')})")
+    agent_result.setdefault("retrieval_display_name", lane["display_name"])
+    agent_result.setdefault("sources_used", infer_sources_used(formatted_citations, lane["source_type"] if formatted_citations else None))
     return lane, agent_result, formatted_citations
 
 
 def build_agent_lane_response(lane: dict, agent_result: dict, formatted_citations: list[dict]) -> dict:
+    route = agent_result.get("route", lane["route"])
+    reasoning = agent_result.get("route_reasoning") or agent_result.get(
+        "reasoning",
+        f"Using {lane['display_name']} agent ({agent_result.get('agent', 'unknown')})",
+    )
     return {
         "answer": agent_result.get("answer", "No answer available"),
-        "route": lane["route"],
-        "reasoning": f"Using {lane['display_name']} agent ({agent_result.get('agent', 'unknown')})",
+        "route": route,
+        "reasoning": reasoning,
         "citations": formatted_citations,
         "pii_blocked": False,
         "pii_warning": None,
-        "sql_query": None,
+        "sql_query": agent_result.get("sql_query"),
         "conversation_id": agent_result.get("conversation_id"),
     }
 
@@ -234,12 +326,24 @@ def emit_agent_lane_stream(
     retrieval_input = f"filters: {display_name} agent retrieval"
     emitter.start(lane["retrieval_step_id"], display_name, retrieval_input)
     retrieval_started = time.perf_counter()
-    _, agent_result, formatted_citations = run_agent_lane(retrieval_mode, backend_query, conversation_id)
+    _, agent_result, formatted_citations = run_agent_lane(
+        retrieval_mode,
+        backend_query,
+        conversation_id,
+        use_llm_routing=use_llm_routing,
+    )
+    effective_route = agent_result.get("route", route)
+    effective_display_name = agent_result.get("retrieval_display_name", display_name)
+    effective_route_reasoning = agent_result.get("route_reasoning", route_reasoning)
+    sources_used = agent_result.get("sources_used") or infer_sources_used(
+        formatted_citations,
+        source_type if formatted_citations else None,
+    )
     emitter.complete(
         lane["retrieval_step_id"],
-        display_name,
+        effective_display_name,
         int((time.perf_counter() - retrieval_started) * 1000),
-        f"{len(formatted_citations)} citation(s) prepared",
+        agent_result.get("retrieval_output_summary", f"{len(formatted_citations)} citation(s) prepared"),
         retrieval_input,
     )
 
@@ -256,10 +360,10 @@ def emit_agent_lane_stream(
     emitter.emit_metadata(
         MetadataEvent(
             intent="GENERAL",
-            sources_used=[source_type] if formatted_citations else [],
-            route=route,
+            sources_used=sources_used,
+            route=effective_route,
             route_confidence=route_confidence,
-            route_reasoning=route_reasoning,
+            route_reasoning=effective_route_reasoning,
             artifacts=[],
         )
     )
@@ -298,11 +402,11 @@ def emit_agent_lane_stream(
         ResultEvent(
             answer=answer_text,
             citations=formatted_citations,
-            sources_used=[source_type] if formatted_citations else [],
+            sources_used=sources_used,
             intent="GENERAL",
-            route=route,
+            route=effective_route,
             route_confidence=route_confidence,
-            route_reasoning=route_reasoning,
+            route_reasoning=effective_route_reasoning,
             artifacts=[],
         )
     )
@@ -430,7 +534,12 @@ def chat():
         backend_query = build_backend_query(message, messages)
 
         if retrieval_mode in {"foundry-iq", "fabric-iq", "rti-iq"}:
-            lane, agent_result, formatted_citations = run_agent_lane(retrieval_mode, backend_query, conversation_id)
+            lane, agent_result, formatted_citations = run_agent_lane(
+                retrieval_mode,
+                backend_query,
+                conversation_id,
+                use_llm_routing=use_llm_routing,
+            )
             return jsonify(build_agent_lane_response(lane, agent_result, formatted_citations))
 
         # Default: Use code-based RAG (JSON response for all routes)

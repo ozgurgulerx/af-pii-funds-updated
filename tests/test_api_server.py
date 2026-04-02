@@ -15,11 +15,38 @@ def load_api_server_module(monkeypatch):
 
     fake_unified_retriever = types.ModuleType("unified_retriever")
 
+    class DummyCitation:
+        def __init__(self, source_type: str, identifier: str, title: str, content_preview: str, score: float):
+            self.source_type = source_type
+            self.identifier = identifier
+            self.title = title
+            self.content_preview = content_preview
+            self.score = score
+
     class DummyRetriever:
         pii_filter = None
 
         def _build_query_analysis_output(self, message: str, route: str) -> str:
             return f"route={route} query={message}"
+
+        def answer(self, message: str, use_llm_routing: bool = True, forced_route: str | None = None):
+            return types.SimpleNamespace(
+                answer="Grounded code-rag fallback",
+                route="RAPTOR",
+                reasoning="IMF context retrieved from RAPTOR",
+                citations=[
+                    DummyCitation(
+                        source_type="RAPTOR",
+                        identifier="IMF_2510",
+                        title="IMF WEO (chunk, L0)",
+                        content_preview="US growth in 2025 remains resilient in the January update.",
+                        score=0.92,
+                    )
+                ],
+                sql_query=None,
+                pii_blocked=False,
+                pii_warning=None,
+            )
 
     fake_unified_retriever.UnifiedRetriever = DummyRetriever
 
@@ -103,15 +130,60 @@ def test_run_agent_lane_falls_back_to_fabric_iq_when_foundry_iq_errors(monkeypat
         None,
     )
 
-    assert lane["display_name"] == "Foundry IQ"
+    assert lane["display_name"] == "Fabric IQ"
     assert agent_result["answer"] == "Grounded Fabric-backed answer"
     assert agent_result["agent"] == "af-funds-fabric-agent"
+    assert agent_result["route"] == "FABRIC_IQ"
     assert formatted_citations == [
         {
-            "source_type": "foundry_iq",
+            "source_type": "fabric_iq",
             "identifier": "Fabric Response for: NVDA holdings",
             "title": "Fabric Response for: NVDA holdings",
             "content_preview": "Ranked funds from Fabric",
             "score": 1.0,
+        }
+    ]
+
+
+def test_run_agent_lane_falls_back_to_code_rag_when_agent_lanes_fail(monkeypatch):
+    module = load_api_server_module(monkeypatch)
+
+    module.foundry_client = types.SimpleNamespace(
+        config_error=None,
+        chat=lambda message, conversation_id=None: {
+            "answer": "Foundry IQ could not access grounded retrieval tools for this question.",
+            "agent": "funds-foundry-IQ-agent",
+            "citations": [],
+            "error": True,
+        },
+    )
+    module.fabric_iq_client = types.SimpleNamespace(
+        config_error=None,
+        chat=lambda message, conversation_id=None: {
+            "answer": "Fabric IQ could not access grounded retrieval tools for this question.",
+            "agent": "af-funds-fabric-agent",
+            "citations": [],
+            "error": True,
+        },
+    )
+
+    lane, agent_result, formatted_citations = module.run_agent_lane(
+        "foundry-iq",
+        "What's IMF saying about US growth in 2025?",
+        None,
+    )
+
+    assert lane["display_name"] == "Foundry IQ"
+    assert agent_result["answer"] == "Grounded code-rag fallback"
+    assert agent_result["route"] == "RAPTOR"
+    assert agent_result["fallback_origin"] == "code-rag"
+    assert agent_result["reasoning"].startswith("Foundry IQ fallback to RAPTOR")
+    assert formatted_citations == [
+        {
+            "source_type": "RAPTOR",
+            "identifier": "IMF_2510",
+            "title": "IMF WEO (chunk, L0)",
+            "content_preview": "US growth in 2025 remains resilient in the January update.",
+            "score": 0.92,
         }
     ]

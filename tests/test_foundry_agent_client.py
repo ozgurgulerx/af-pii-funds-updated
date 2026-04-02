@@ -526,3 +526,50 @@ def test_chat_rejects_retry_prompt_with_estimated_holdings(monkeypatch):
     assert result["citations"] == []
     assert "grounded retrieval tools" in result["answer"]
     assert "Estimated list of funds" not in result["answer"]
+
+
+def test_chat_rejects_retry_prompt_with_generic_answer_offer(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_retry_generic",
+                "conversation": "conv_retry_generic",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "I can pull exact N-PORT holdings, but I hit an error retrieving the "
+                                    "fund database just now. Would you like me to retry? If you want an "
+                                    "immediate, general answer without exact N-PORT citations, I can "
+                                    "summarize which fund types typically have the largest NVIDIA "
+                                    "exposures."
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "immediate, general answer" not in result["answer"]
