@@ -17,6 +17,7 @@ on:
       - 'Dockerfile.backend'
       - '.dockerignore'
       - 'k8s/**'
+      - '.github/workflows/deploy-backend.yaml'
   workflow_dispatch:
 
 # Required for OIDC authentication
@@ -25,6 +26,8 @@ permissions:
   contents: read
 
 env:
+  ACR_NAME: aistartuptr
+  ACR_RESOURCE_GROUP: aistartuptr
   AZURE_CONTAINER_REGISTRY: aistartuptr.azurecr.io
   IMAGE_NAME: fund-rag-backend
   AKS_CLUSTER: aks-fund-rag
@@ -45,15 +48,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Login to Azure Container Registry
-        run: az acr login --name aistartuptr
-
       - name: Build and push Docker image
         run: |
-          docker build -f Dockerfile.backend -t ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker tag ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          az acr build \
+            --registry ${{ env.ACR_NAME }} \
+            --resource-group ${{ env.ACR_RESOURCE_GROUP }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.IMAGE_NAME }}:latest \
+            --file Dockerfile.backend \
+            --platform linux/amd64 \
+            .
 
   deploy:
     needs: build-and-push
