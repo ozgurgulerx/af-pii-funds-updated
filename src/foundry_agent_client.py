@@ -36,6 +36,7 @@ class FoundryAgentClient:
         allow_default_project_config: bool = True,
         api_mode: str = "legacy_responses",
         credential_env_prefix: str | None = None,
+        tool_user_error_fallback_message: str | None = None,
     ):
         self.agent_name = agent_name
         self.display_name = display_name
@@ -44,6 +45,7 @@ class FoundryAgentClient:
         self.api_mode = api_mode
         self.agent_version = agent_version
         self.credential_env_prefix = credential_env_prefix
+        self.tool_user_error_fallback_message = tool_user_error_fallback_message
 
         # Azure AI Foundry project configuration
         default_base_url = (
@@ -146,6 +148,59 @@ class FoundryAgentClient:
             and getattr(response, "status_code", None) == 400
         )
 
+    def _should_retry_with_tool_user_error_fallback(self, response, body: dict) -> bool:
+        """Retry Fabric-style prompt_v1 requests with a KB/search-only fallback prompt."""
+        if (
+            self.api_mode != "prompt_v1"
+            or not self.tool_user_error_fallback_message
+            or getattr(response, "status_code", None) != 400
+        ):
+            return False
+
+        error_text = getattr(response, "text", "") or ""
+        normalized = error_text.lower()
+        if "tool_user_error" not in normalized and "create assistant failed" not in normalized:
+            return False
+
+        input_items = body.get("input")
+        if not isinstance(input_items, list) or not input_items:
+            return False
+
+        first_item = input_items[0]
+        if not isinstance(first_item, dict):
+            return False
+
+        content = first_item.get("content")
+        if not isinstance(content, str):
+            return False
+
+        return self.tool_user_error_fallback_message not in content
+
+    def _build_tool_user_error_fallback_body(self, body: dict) -> dict:
+        """Rebuild the request with explicit KB/search fallback guidance."""
+        fallback_body = dict(body)
+        fallback_body.pop("tool_choice", None)
+
+        input_items = fallback_body.get("input")
+        if not isinstance(input_items, list) or not input_items:
+            return fallback_body
+
+        first_item = input_items[0]
+        if not isinstance(first_item, dict):
+            return fallback_body
+
+        content = first_item.get("content")
+        if not isinstance(content, str):
+            return fallback_body
+
+        updated_item = dict(first_item)
+        updated_item["content"] = (
+            f"{self.tool_user_error_fallback_message}\n\n"
+            f"Original user question:\n{content}"
+        )
+        fallback_body["input"] = [updated_item, *input_items[1:]]
+        return fallback_body
+
     def _extract_response(self, data: dict) -> tuple:
         """Extract answer and citations from response data.
 
@@ -217,12 +272,21 @@ class FoundryAgentClient:
             "403 error",
             "403 forbidden",
             "retrieval error",
+            "tool error",
+            "service error",
+            "internal error",
             "having trouble accessing",
             "unable to access",
+            "unable to reach",
             "can't access",
             "cannot access",
             "could not access",
+            "couldn't retrieve",
+            "could not retrieve",
+            "failed to retrieve",
+            "retrieve the source",
             "holdings database",
+            "database is failing right now",
             "tool unavailable",
             "retrieval tool",
         ]
@@ -230,12 +294,30 @@ class FoundryAgentClient:
             "previously pulled",
             "i can still share the list",
             "i can retry",
+            "retry and return",
             "official list with citations",
+            "authoritative list",
+            "proper citation",
             "quick question to make results most useful",
             "which option do you want me to fetch",
+            "which do you prefer",
+            "which would you prefer",
+            "would you like me to",
             "once the tool is available",
             "when the tool is available",
+            "for now",
             "happy to retry",
+            "quick (unsourced) summary",
+            "unsourced summary",
+            "sourced-agnostic summary",
+            "sourced-free overview",
+            "best-effort",
+            "estimated",
+            "no official",
+            "due to access issue",
+            "clarifying questions",
+            "non-authoritative",
+            "non-filed summary",
         ]
 
         return (
@@ -319,6 +401,12 @@ class FoundryAgentClient:
                 fallback_body = dict(body)
                 fallback_body.pop("tool_choice", None)
                 response = self._post_response(url, headers, fallback_body, timeout=120)
+                body = fallback_body
+
+            if not response.ok and self._should_retry_with_tool_user_error_fallback(response, body):
+                fallback_body = self._build_tool_user_error_fallback_body(body)
+                response = self._post_response(url, headers, fallback_body, timeout=120)
+                body = fallback_body
 
             if not response.ok:
                 error_text = response.text
@@ -411,6 +499,8 @@ class FoundryAgentClient:
                 # Check if we now have a final message
                 answer, citations, has_final = self._extract_response(data)
                 if has_final and answer:
+                    if self._is_ungrounded_tool_failure_answer(answer, citations):
+                        return self._build_grounding_failure_result()
                     return {
                         "answer": answer,
                         "agent": self.agent_name,

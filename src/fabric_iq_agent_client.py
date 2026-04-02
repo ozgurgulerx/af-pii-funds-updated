@@ -33,4 +33,10 @@ class FabricIQAgentClient(FoundryAgentClient):
             allow_default_project_config=False,
             api_mode="prompt_v1",
             credential_env_prefix="FABRIC_IQ",
+            tool_user_error_fallback_message=(
+                "The Microsoft Fabric data agent tool is unavailable in this runtime. "
+                "Do not use the Fabric data agent for this request. "
+                "Answer only from the connected AF funds knowledge base and Azure AI Search fallback. "
+                "If the requested fact is not available there, state that limitation explicitly instead of failing."
+            ),
         )

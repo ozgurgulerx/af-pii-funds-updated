@@ -172,6 +172,76 @@ def test_prompt_v1_chat_retries_without_required_tool_choice_after_bad_request(m
     assert result["answer"] == "retry-ok"
 
 
+def test_prompt_v1_chat_retries_with_kb_only_fallback_after_tool_user_error(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+    captured_requests = []
+
+    class FakeToolUserErrorResponse:
+        ok = False
+        status_code = 400
+        text = (
+            '{"error":{"message":"Create assistant failed","code":"tool_user_error"}}'
+        )
+
+        @staticmethod
+        def json():
+            return {"error": {"message": "Create assistant failed", "code": "tool_user_error"}}
+
+    class FakeSuccessResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_kb_fallback",
+                "conversation": "conv_kb_fallback",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"text": "kb-only-ok"}],
+                    }
+                ],
+            }
+
+    responses = [FakeToolUserErrorResponse(), FakeToolUserErrorResponse(), FakeSuccessResponse()]
+
+    def fake_post(url, headers, json, params, timeout):
+        captured_requests.append(
+            {
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "params": params,
+                "timeout": timeout,
+            }
+        )
+        return responses.pop(0)
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    fallback_message = "Use only the knowledge base fallback."
+    client = module.FoundryAgentClient(
+        agent_name="af-funds-fabric-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        agent_version="10",
+        api_mode="prompt_v1",
+        allow_default_project_config=False,
+        tool_user_error_fallback_message=fallback_message,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert len(captured_requests) == 3
+    assert captured_requests[0]["json"]["tool_choice"] == "required"
+    assert "tool_choice" not in captured_requests[1]["json"]
+    assert "tool_choice" not in captured_requests[2]["json"]
+    assert fallback_message in captured_requests[2]["json"]["input"][0]["content"]
+    assert "Original user question" in captured_requests[2]["json"]["input"][0]["content"]
+    assert result["answer"] == "kb-only-ok"
+
+
 def test_uses_prefixed_client_secret_credential_when_foundry_env_vars_are_present(monkeypatch):
     module = load_foundry_agent_client_module(monkeypatch)
 
@@ -311,3 +381,148 @@ def test_chat_rejects_retrieval_error_clarifier_answer(monkeypatch):
     assert result["citations"] == []
     assert "grounded retrieval tools" in result["answer"]
     assert "official list with citations" not in result["answer"]
+
+
+def test_chat_rejects_unsourced_macro_retry_answer(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_macro_retry",
+                "conversation": "conv_macro_retry",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "I’m sorry — I tried to pull the IMF World Economic Outlook data but "
+                                    "couldn’t retrieve the source due to an internal error. I can retry "
+                                    "and return the IMF’s official 2025 US growth projection with a proper "
+                                    "citation, or I can give a brief, sourced-agnostic summary of the IMF’s "
+                                    "likely view and the drivers/risks for US growth in 2025. Which do you "
+                                    "prefer?\n\nQuick (unsourced) summary: the IMF expects growth to "
+                                    "moderate as tighter policy weighs on demand."
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("What's IMF saying about US growth in 2025?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "Quick (unsourced) summary" not in result["answer"]
+
+
+def test_chat_rejects_best_effort_nport_summary_answer(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_best_effort",
+                "conversation": "conv_best_effort",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "Short answer: I can pull an authoritative list from the SEC N-PORT "
+                                    "fund filings, but my access to the N-PORT database is failing right "
+                                    "now. I can (A) retry and return a ranked list of funds + NVDA "
+                                    "weight/value, or (B) give a best-effort, non-filed summary of the "
+                                    "fund types and ETFs that typically hold the largest NVIDIA positions. "
+                                    "Which would you prefer?"
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "best-effort" not in result["answer"]
+
+
+def test_chat_rejects_retry_prompt_with_estimated_holdings(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_estimated_holdings",
+                "conversation": "conv_estimated_holdings",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "I can pull exact N-PORT holdings, but I’m currently unable to access "
+                                    "the SEC N-PORT database (tool error). Would you like me to retry "
+                                    "fetching the exact list, or for now see a quick list of funds/ETFs "
+                                    "that typically have the largest NVIDIA exposures (estimates and "
+                                    "reasons)? Estimated list of funds that commonly hold the biggest "
+                                    "NVIDIA positions (no official N-PORT citations due to access issue)."
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "Estimated list of funds" not in result["answer"]
