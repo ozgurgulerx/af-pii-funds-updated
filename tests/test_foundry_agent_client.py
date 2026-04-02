@@ -263,3 +263,51 @@ def test_chat_rejects_ungrounded_tool_failure_answer(monkeypatch):
     assert result["citations"] == []
     assert "grounded retrieval tools" in result["answer"]
     assert "previously pulled" not in result["answer"]
+
+
+def test_chat_rejects_retrieval_error_clarifier_answer(monkeypatch):
+    module = load_foundry_agent_client_module(monkeypatch)
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "id": "resp_retry_prompt",
+                "conversation": "conv_retry_prompt",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "text": (
+                                    "I’m unable to access the SEC N-PORT holdings database right now "
+                                    "(retrieval error). I can retry — would you like me to pull the official "
+                                    "list with citations?\n\nQuick question to make results most useful: do "
+                                    "you want funds ranked by absolute $ value of their NVIDIA (NVDA) "
+                                    "position, or NVIDIA as a percentage of the fund’s net assets?\n\n"
+                                    "Which option do you want me to fetch?"
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    client = module.FoundryAgentClient(
+        agent_name="funds-foundry-IQ-agent",
+        base_url="https://example.services.ai.azure.com",
+        project="admin-4912",
+        allow_default_project_config=False,
+    )
+    monkeypatch.setattr(client, "_get_token", lambda: "test-token")
+
+    result = client.chat("Which funds have the biggest NVIDIA positions?")
+
+    assert result["error"] is True
+    assert result["citations"] == []
+    assert "grounded retrieval tools" in result["answer"]
+    assert "official list with citations" not in result["answer"]

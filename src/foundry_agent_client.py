@@ -216,16 +216,23 @@ class FoundryAgentClient:
         access_failure_signals = [
             "403 error",
             "403 forbidden",
+            "retrieval error",
             "having trouble accessing",
+            "unable to access",
             "can't access",
             "cannot access",
             "could not access",
+            "holdings database",
             "tool unavailable",
             "retrieval tool",
         ]
         stale_fallback_signals = [
             "previously pulled",
             "i can still share the list",
+            "i can retry",
+            "official list with citations",
+            "quick question to make results most useful",
+            "which option do you want me to fetch",
             "once the tool is available",
             "when the tool is available",
             "happy to retry",

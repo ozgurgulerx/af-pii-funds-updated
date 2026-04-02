@@ -149,6 +149,15 @@ def run_agent_lane(retrieval_mode: str, backend_query: str, conversation_id: str
         raise ValueError(f"Unsupported agent retrieval mode {retrieval_mode!r}")
 
     agent_result = lane["client"].chat(backend_query, conversation_id=conversation_id)
+    if (
+        retrieval_mode == "foundry-iq"
+        and agent_result.get("error")
+        and getattr(fabric_iq_client, "config_error", None) is None
+    ):
+        fabric_result = fabric_iq_client.chat(backend_query, conversation_id=conversation_id)
+        if not fabric_result.get("error"):
+            agent_result = fabric_result
+
     formatted_citations = format_agent_citations(
         agent_result.get("citations", []),
         source_type=lane["source_type"],
